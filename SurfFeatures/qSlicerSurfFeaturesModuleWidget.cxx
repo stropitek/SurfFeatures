@@ -132,3 +132,4 @@ void qSlicerSurfFeaturesModuleWidget::onVolumeSelect(vtkMRMLNode* node)
 
   free(void_ptr);
 }
+
