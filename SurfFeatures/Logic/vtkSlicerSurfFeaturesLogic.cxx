@@ -26,8 +26,8 @@
 // STD includes
 #include <cassert>
 
-#include <cv.h>
-#include <highgui.h>
+// #include <cv.h>
+// #include <highgui.h>
 
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerSurfFeaturesLogic);

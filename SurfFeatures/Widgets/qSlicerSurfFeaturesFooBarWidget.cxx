@@ -25,8 +25,6 @@
 #include <iostream>
 #include <fstream>
 
-#include <cv.h>
-
 //-----------------------------------------------------------------------------
 /// \ingroup Slicer_QtModules_SurfFeatures
 class qSlicerSurfFeaturesFooBarWidgetPrivate
@@ -81,6 +79,5 @@ qSlicerSurfFeaturesFooBarWidget
 void qSlicerSurfFeaturesFooBarWidget
 ::onFooBar()
 {
-	cv::Complexf cf;
 
 }
