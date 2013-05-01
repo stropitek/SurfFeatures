@@ -4,7 +4,7 @@ if(DEFINED OpenCV_DIR AND NOT EXISTS ${OpenCV_DIR})
 endif()
 
 set(OPENCV_GIT_REPO "${git_protocol}://code.opencv.org/opencv.git")
-set(OPENCV_GIT_TAG "564f60988529595d18673f9d1271d5bf295a5a39")
+set(OPENCV_GIT_TAG "2.4.5")
 
 if(NOT DEFINED OpenCV_DIR)
   set(OpenCV_DEPEND OpenCV)

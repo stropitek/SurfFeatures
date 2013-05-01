@@ -45,6 +45,8 @@ public:
   vtkTypeMacro(vtkSlicerSurfFeaturesLogic, vtkSlicerModuleLogic);
   void PrintSelf(ostream& os, vtkIndent indent);
 
+  void displayFeatures(vtkMRMLNode*);
+
 protected:
   vtkSlicerSurfFeaturesLogic();
   virtual ~vtkSlicerSurfFeaturesLogic();

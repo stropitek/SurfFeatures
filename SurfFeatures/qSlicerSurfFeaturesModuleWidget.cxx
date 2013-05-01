@@ -22,39 +22,43 @@
 #include "qSlicerSurfFeaturesModuleWidget.h"
 #include "ui_qSlicerSurfFeaturesModuleWidget.h"
 
-// MRML includes
-#include <vtkMRMLVolumeNode.h>
-#include <vtkMRMLScalarVolumeNode.h>
-#include <vtkImageData.h>
-#include <vtkImageExport.h>
-
 // stl includes
 #include <fstream>
 
-// OpenCV includes
-
-#include <stdio.h>
-#include <iostream>
-#include "opencv2/core/core.hpp"
-//#include "opencv2/features2d/features2d.hpp"
-#include "opencv2/highgui/highgui.hpp"
-#include <opencv2/nonfree/features2d.hpp>
+// Logic
+#include "vtkSlicerSurfFeaturesLogic.h"
 
 
 //-----------------------------------------------------------------------------
 /// \ingroup Slicer_QtModules_ExtensionTemplate
 class qSlicerSurfFeaturesModuleWidgetPrivate: public Ui_qSlicerSurfFeaturesModuleWidget
 {
+  Q_DECLARE_PUBLIC(qSlicerSurfFeaturesModuleWidget)
+protected:
+  qSlicerSurfFeaturesModuleWidget* const q_ptr;
 public:
-  qSlicerSurfFeaturesModuleWidgetPrivate();
+  ~qSlicerSurfFeaturesModuleWidgetPrivate();
+  qSlicerSurfFeaturesModuleWidgetPrivate(qSlicerSurfFeaturesModuleWidget& object);
+
+  vtkSlicerSurfFeaturesLogic* logic() const;
 };
 
 //-----------------------------------------------------------------------------
 // qSlicerSurfFeaturesModuleWidgetPrivate methods
 
 //-----------------------------------------------------------------------------
-qSlicerSurfFeaturesModuleWidgetPrivate::qSlicerSurfFeaturesModuleWidgetPrivate()
+qSlicerSurfFeaturesModuleWidgetPrivate::~qSlicerSurfFeaturesModuleWidgetPrivate()
 {
+}
+
+qSlicerSurfFeaturesModuleWidgetPrivate::qSlicerSurfFeaturesModuleWidgetPrivate(qSlicerSurfFeaturesModuleWidget& object): q_ptr(&object)
+{
+}
+
+vtkSlicerSurfFeaturesLogic* qSlicerSurfFeaturesModuleWidgetPrivate::logic() const
+{
+  Q_Q(const qSlicerSurfFeaturesModuleWidget);
+  return vtkSlicerSurfFeaturesLogic::SafeDownCast(q->logic());
 }
 
 //-----------------------------------------------------------------------------
@@ -63,7 +67,7 @@ qSlicerSurfFeaturesModuleWidgetPrivate::qSlicerSurfFeaturesModuleWidgetPrivate()
 //-----------------------------------------------------------------------------
 qSlicerSurfFeaturesModuleWidget::qSlicerSurfFeaturesModuleWidget(QWidget* _parent)
   : Superclass( _parent )
-  , d_ptr( new qSlicerSurfFeaturesModuleWidgetPrivate )
+  , d_ptr( new qSlicerSurfFeaturesModuleWidgetPrivate(*this) )
 {
 }
 
@@ -86,50 +90,8 @@ void qSlicerSurfFeaturesModuleWidget::onVolumeSelect(vtkMRMLNode* node)
 {
   Q_D(qSlicerSurfFeaturesModuleWidget);
   Q_ASSERT(d->InputVolumeComboBox);
-  if(!node)
-    return;
-  if(strcmp(node->GetClassName(),"vtkMRMLScalarVolumeNode"))
-    return;
-  vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(node);
-  int minHessian = 400;
-  cv::SurfFeatureDetector detector( minHessian );
-  vtkImageData* data = sv_node->GetImageData();
-  if(!data)
-    return;
-  int dims[3];
-  data->GetDimensions(dims);
-  std::ofstream os("C:\\DK\\hello.txt");
-  os << "Node class name: " << node->GetClassName() << std::endl;
-  os << "Data dimensions " << dims[0] << " " << dims[1] << " " << dims[2] << std::endl;
-  os << "Data scalar type: " << data->GetScalarTypeAsString() << std::endl << "Data type int: " << data->GetScalarType() << std::endl;
-
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  logic->displayFeatures(node);
   
-  vtkImageExport *exporter = vtkImageExport::New();
-  exporter->SetInput(data);
-
-  int numel = dims[0]*dims[1]*dims[2];
-  void* void_ptr = malloc(numel);
-  unsigned char* char_ptr = (unsigned char*) void_ptr;
-  exporter->SetExportVoidPointer(void_ptr);
-  exporter->Export();
-  unsigned char* c_data = (unsigned char*)exporter->GetExportVoidPointer();
-  os << "A point: " << c_data[3200] << std::endl;
-
-  cv::Mat mat(dims[1],dims[0],CV_8U ,void_ptr);
-
-  std::vector<cv::KeyPoint> keypoints;
-  detector.detect(mat,keypoints);
-
-  //-- Draw keypoints
-  cv::Mat img_keypoints;
-
-  cv::drawKeypoints( mat, keypoints, img_keypoints, cv::Scalar::all(-1), cv::DrawMatchesFlags::DEFAULT );
-
-  //-- Show detected (drawn) keypoints
-  cv::imshow("Keypoints 1", img_keypoints );
-
-  cv::waitKey(0);
-
-  free(void_ptr);
 }
 
