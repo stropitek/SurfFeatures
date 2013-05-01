@@ -28,9 +28,11 @@
 #include "vtkSlicerModuleLogic.h"
 
 // MRML includes
+#include "vtkMRMLScalarVolumeNode.h"
 
 // STD includes
 #include <cstdlib>
+#include <fstream>
 
 #include "vtkSlicerSurfFeaturesModuleLogicExport.h"
 
@@ -46,6 +48,7 @@ public:
   void PrintSelf(ostream& os, vtkIndent indent);
 
   void displayFeatures(vtkMRMLNode*);
+  void setObservedNode(vtkMRMLScalarVolumeNode* snode);
 
 protected:
   vtkSlicerSurfFeaturesLogic();
@@ -57,10 +60,17 @@ protected:
   virtual void UpdateFromMRMLScene();
   virtual void OnMRMLSceneNodeAdded(vtkMRMLNode* node);
   virtual void OnMRMLSceneNodeRemoved(vtkMRMLNode* node);
+
+  virtual void ProcessMRMLNodesEvents(vtkObject* caller, unsigned long event, void * callData);
 private:
 
   vtkSlicerSurfFeaturesLogic(const vtkSlicerSurfFeaturesLogic&); // Not implemented
   void operator=(const vtkSlicerSurfFeaturesLogic&);               // Not implemented
+
+  // Attributes
+private:
+  vtkMRMLScalarVolumeNode* observedNode;
+  std::ofstream ofs;
 };
 
 #endif

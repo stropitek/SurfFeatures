@@ -91,7 +91,9 @@ void qSlicerSurfFeaturesModuleWidget::onVolumeSelect(vtkMRMLNode* node)
   Q_D(qSlicerSurfFeaturesModuleWidget);
   Q_ASSERT(d->InputVolumeComboBox);
   vtkSlicerSurfFeaturesLogic* logic = d->logic();
-  logic->displayFeatures(node);
+  vtkMRMLScalarVolumeNode* snode = vtkMRMLScalarVolumeNode::SafeDownCast(node);
+  logic->setObservedNode(snode);
+  //logic->displayFeatures(node);
   
 }
 

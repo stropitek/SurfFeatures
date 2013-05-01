@@ -25,6 +25,8 @@
 
 // STD includes
 #include <cassert>
+#include <ctime>
+#include <fstream>
 
 // MRML includes
 #include <vtkMRMLVolumeNode.h>
@@ -36,7 +38,6 @@
 #include <stdio.h>
 #include <iostream>
 #include "opencv2/core/core.hpp"
-//#include "opencv2/features2d/features2d.hpp"
 #include "opencv2/highgui/highgui.hpp"
 #include <opencv2/nonfree/features2d.hpp>
 
@@ -46,6 +47,8 @@ vtkStandardNewMacro(vtkSlicerSurfFeaturesLogic);
 //----------------------------------------------------------------------------
 vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
 {
+  this->observedNode = NULL;
+  ofs.open("C:\\DK\\hello.txt");
 }
 
 //----------------------------------------------------------------------------
@@ -108,10 +111,11 @@ void vtkSlicerSurfFeaturesLogic::displayFeatures(vtkMRMLNode* node)
     return;
   int dims[3];
   data->GetDimensions(dims);
-  std::ofstream os("C:\\DK\\hello.txt");
-  os << "Node class name: " << node->GetClassName() << std::endl;
-  os << "Data dimensions " << dims[0] << " " << dims[1] << " " << dims[2] << std::endl;
-  os << "Data scalar type: " << data->GetScalarTypeAsString() << std::endl << "Data type int: " << data->GetScalarType() << std::endl;
+  /*
+  ofs << "Node class name: " << node->GetClassName() << std::endl;
+  ofs << "Data dimensions " << dims[0] << " " << dims[1] << " " << dims[2] << std::endl;
+  ofs << "Data scalar type: " << data->GetScalarTypeAsString() << std::endl << "Data type int: " << data->GetScalarType() << std::endl;
+  //*/
 
   
   vtkImageExport *exporter = vtkImageExport::New();
@@ -123,13 +127,25 @@ void vtkSlicerSurfFeaturesLogic::displayFeatures(vtkMRMLNode* node)
   exporter->SetExportVoidPointer(void_ptr);
   exporter->Export();
   unsigned char* c_data = (unsigned char*)exporter->GetExportVoidPointer();
-  os << "A point: " << c_data[3200] << std::endl;
+  ofs << "A point: " << c_data[3200] << std::endl;
 
   cv::Mat mat(dims[1],dims[0],CV_8U ,void_ptr);
 
   std::vector<cv::KeyPoint> keypoints;
-  detector.detect(mat,keypoints);
 
+
+  clock_t startTime = clock();
+  detector.detect(mat,keypoints);
+  clock_t endTime = clock();
+  clock_t clockTicksTaken = endTime - startTime;
+  double timeInSeconds = clockTicksTaken / (double) CLOCKS_PER_SEC;
+  ofs << "time taken for feature detector: " << timeInSeconds << " seconds." << std::endl;
+  
+  
+
+ 
+
+  /*
   //-- Draw keypoints
   cv::Mat img_keypoints;
 
@@ -139,7 +155,49 @@ void vtkSlicerSurfFeaturesLogic::displayFeatures(vtkMRMLNode* node)
   cv::imshow("Keypoints 1", img_keypoints );
 
   cv::waitKey(0);
+  //*/
 
   free(void_ptr);
+}
+
+void vtkSlicerSurfFeaturesLogic
+::ProcessMRMLNodesEvents( vtkObject* caller, unsigned long event, void * callData )
+{
+  if ( caller == NULL )
+    {
+    return;
+    }
+  
+  if ( event != vtkCommand::ModifiedEvent
+       && event != vtkMRMLVolumeNode::ImageDataModifiedEvent )
+    {
+    this->Superclass::ProcessMRMLNodesEvents( caller, event, callData );
+    }
+  else
+  {
+    vtkMRMLScalarVolumeNode* scalarNode = vtkMRMLScalarVolumeNode::SafeDownCast( caller );
+    this->displayFeatures(scalarNode);
+  }
+}
+
+void vtkSlicerSurfFeaturesLogic::setObservedNode(vtkMRMLScalarVolumeNode *snode)
+{
+  if(snode==this->observedNode)
+    return;
+  if(!snode)
+    return;
+
+  int wasModifying = this->StartModify();
+  if(this->observedNode)
+    vtkSetAndObserveMRMLNodeMacro( this->observedNode, 0 );
+
+  vtkMRMLScalarVolumeNode* newNode = NULL;
+  vtkSmartPointer< vtkIntArray > events = vtkSmartPointer< vtkIntArray >::New();
+  events->InsertNextValue( vtkCommand::ModifiedEvent );
+  events->InsertNextValue( vtkMRMLVolumeNode::ImageDataModifiedEvent );
+  vtkSetAndObserveMRMLNodeEventsMacro( newNode, snode, events );
+  this->observedNode = newNode;
+  
+  this->EndModify( wasModifying );
 }
 
