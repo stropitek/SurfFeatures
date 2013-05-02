@@ -22,6 +22,7 @@
 
 // VTK includes
 #include <vtkNew.h>
+#include <vtkExtractVOI.h>
 
 // STD includes
 #include <cassert>
@@ -99,35 +100,50 @@ void vtkSlicerSurfFeaturesLogic
 
 void vtkSlicerSurfFeaturesLogic::displayFeatures(vtkMRMLNode* node)
 {
+  // Verify validity of node
   if(!node)
     return;
   if(strcmp(node->GetClassName(),"vtkMRMLScalarVolumeNode"))
     return;
   vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(node);
+
+  // Surf detector initialization
   int minHessian = 400;
   cv::SurfFeatureDetector detector( minHessian );
+
+  // Get and verify image data
   vtkImageData* data = sv_node->GetImageData();
   if(!data)
     return;
+
+  // Get image dimensions
   int dims[3];
   data->GetDimensions(dims);
+
+  // Crop image
+  vtkSmartPointer<vtkExtractVOI> extractVOI = vtkExtractVOI::New();
+  extractVOI->SetInput(data);
+  extractVOI->SetVOI(dims[0]/5.,3.*dims[0]/3.9,dims[1]/6,3.*dims[1]/4, 0, 0);
+  extractVOI->SetSampleRate(1,1,1);
+  extractVOI->Update();
+  vtkImageData* croppedData = extractVOI->GetOutput();
+
   /*
   ofs << "Node class name: " << node->GetClassName() << std::endl;
   ofs << "Data dimensions " << dims[0] << " " << dims[1] << " " << dims[2] << std::endl;
   ofs << "Data scalar type: " << data->GetScalarTypeAsString() << std::endl << "Data type int: " << data->GetScalarType() << std::endl;
-  //*/
+  //*/ 
 
   
   vtkImageExport *exporter = vtkImageExport::New();
-  exporter->SetInput(data);
-
+  exporter->SetInput(croppedData);
+  croppedData->GetDimensions(dims);
   int numel = dims[0]*dims[1]*dims[2];
   void* void_ptr = malloc(numel);
   unsigned char* char_ptr = (unsigned char*) void_ptr;
   exporter->SetExportVoidPointer(void_ptr);
   exporter->Export();
   unsigned char* c_data = (unsigned char*)exporter->GetExportVoidPointer();
-  ofs << "A point: " << c_data[3200] << std::endl;
 
   cv::Mat mat(dims[1],dims[0],CV_8U ,void_ptr);
 
@@ -145,7 +161,7 @@ void vtkSlicerSurfFeaturesLogic::displayFeatures(vtkMRMLNode* node)
 
  
 
-  /*
+  /*//
   //-- Draw keypoints
   cv::Mat img_keypoints;
 
