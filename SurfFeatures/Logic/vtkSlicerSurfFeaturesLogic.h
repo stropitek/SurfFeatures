@@ -33,6 +33,7 @@
 // STD includes
 #include <cstdlib>
 #include <fstream>
+#include <ctime>
 
 #include "vtkSlicerSurfFeaturesModuleLogicExport.h"
 
@@ -71,6 +72,8 @@ private:
 private:
   vtkMRMLScalarVolumeNode* observedNode;
   std::ofstream ofs;
+  clock_t lastImageModified;
+  clock_t initSurf;
 };
 
 #endif

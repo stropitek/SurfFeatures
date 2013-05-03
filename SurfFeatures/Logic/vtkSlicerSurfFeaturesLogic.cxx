@@ -50,6 +50,7 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
 {
   this->observedNode = NULL;
   ofs.open("C:\\DK\\hello.txt");
+  this->lastImageModified = clock();
 }
 
 //----------------------------------------------------------------------------
@@ -184,13 +185,17 @@ void vtkSlicerSurfFeaturesLogic
     return;
     }
   
-  if ( event != vtkCommand::ModifiedEvent
-       && event != vtkMRMLVolumeNode::ImageDataModifiedEvent )
+  if (  event != vtkMRMLVolumeNode::ImageDataModifiedEvent )
     {
     this->Superclass::ProcessMRMLNodesEvents( caller, event, callData );
     }
   else
   {
+    clock_t now = clock();
+    clock_t clockTicksTaken = now - this->lastImageModified;
+    this->lastImageModified = now;
+    double timeInSeconds = clockTicksTaken / (double) CLOCKS_PER_SEC;
+    ofs << "time since last image modified " << timeInSeconds << " seconds." << std::endl;
     vtkMRMLScalarVolumeNode* scalarNode = vtkMRMLScalarVolumeNode::SafeDownCast( caller );
     this->displayFeatures(scalarNode);
   }
@@ -209,7 +214,7 @@ void vtkSlicerSurfFeaturesLogic::setObservedNode(vtkMRMLScalarVolumeNode *snode)
 
   vtkMRMLScalarVolumeNode* newNode = NULL;
   vtkSmartPointer< vtkIntArray > events = vtkSmartPointer< vtkIntArray >::New();
-  events->InsertNextValue( vtkCommand::ModifiedEvent );
+  //events->InsertNextValue( vtkCommand::ModifiedEvent );
   events->InsertNextValue( vtkMRMLVolumeNode::ImageDataModifiedEvent );
   vtkSetAndObserveMRMLNodeEventsMacro( newNode, snode, events );
   this->observedNode = newNode;
