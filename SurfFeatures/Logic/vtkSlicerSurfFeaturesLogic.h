@@ -35,6 +35,13 @@
 #include <fstream>
 #include <ctime>
 
+// OpenCV includes
+#include "opencv2/core/core.hpp"
+#include <opencv2/nonfree/features2d.hpp>
+
+// Qt includes
+#include <QTextEdit>
+
 #include "vtkSlicerSurfFeaturesModuleLogicExport.h"
 
 
@@ -50,6 +57,9 @@ public:
 
   void displayFeatures(vtkMRMLNode*);
   void setObservedNode(vtkMRMLScalarVolumeNode* snode);
+  void toggleRecord();
+  void match();
+  void setConsole(QTextEdit* console);
 
 protected:
   vtkSlicerSurfFeaturesLogic();
@@ -68,12 +78,19 @@ private:
   vtkSlicerSurfFeaturesLogic(const vtkSlicerSurfFeaturesLogic&); // Not implemented
   void operator=(const vtkSlicerSurfFeaturesLogic&);               // Not implemented
 
+  void recordData(vtkMRMLNode* node);
+  void matchImageToDatabase(vtkMRMLNode* node);
+
   // Attributes
 private:
   vtkMRMLScalarVolumeNode* observedNode;
-  std::ofstream ofs;
   clock_t lastImageModified;
   clock_t initSurf;
+  bool recording;
+  bool matchNext;
+  cv::FlannBasedMatcher flannMatcher;
+  std::vector<cv::Mat> descriptorDatabase;
+  QTextEdit* console;
 };
 
 #endif

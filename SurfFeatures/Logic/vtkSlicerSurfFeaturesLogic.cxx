@@ -28,6 +28,8 @@
 #include <cassert>
 #include <ctime>
 #include <fstream>
+#include <stdio.h>
+#include <iostream>
 
 // MRML includes
 #include <vtkMRMLVolumeNode.h>
@@ -36,8 +38,6 @@
 #include <vtkImageExport.h>
 
 // OpenCV includes
-#include <stdio.h>
-#include <iostream>
 #include "opencv2/core/core.hpp"
 #include "opencv2/highgui/highgui.hpp"
 #include <opencv2/nonfree/features2d.hpp>
@@ -49,8 +49,9 @@ vtkStandardNewMacro(vtkSlicerSurfFeaturesLogic);
 vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
 {
   this->observedNode = NULL;
-  ofs.open("C:\\DK\\hello.txt");
   this->lastImageModified = clock();
+  this->recording = false;
+  this->matchNext = false;
 }
 
 //----------------------------------------------------------------------------
@@ -67,7 +68,6 @@ void vtkSlicerSurfFeaturesLogic::PrintSelf(ostream& os, vtkIndent indent)
 //---------------------------------------------------------------------------
 void vtkSlicerSurfFeaturesLogic::SetMRMLSceneInternal(vtkMRMLScene * newScene)
 {
-  //cv::FileNodeIterator cf;
   vtkNew<vtkIntArray> events;
   events->InsertNextValue(vtkMRMLScene::NodeAddedEvent);
   events->InsertNextValue(vtkMRMLScene::NodeRemovedEvent);
@@ -101,16 +101,36 @@ void vtkSlicerSurfFeaturesLogic
 
 void vtkSlicerSurfFeaturesLogic::displayFeatures(vtkMRMLNode* node)
 {
+  // Only if recording
+  if(!this->recording && !this->matchNext)
+    return;
   // Verify validity of node
   if(!node)
     return;
+  // Verify we have scalar volume node
   if(strcmp(node->GetClassName(),"vtkMRMLScalarVolumeNode"))
     return;
+
+  if(this->matchNext)
+    this->recording = false;
+
+  if(this->recording)
+    this->recordData(node);
+  else if(this->matchNext)
+  {
+    this->matchImageToDatabase(node);
+    this->matchNext = false;
+  }
+}
+
+void vtkSlicerSurfFeaturesLogic::recordData(vtkMRMLNode* node)
+{
   vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(node);
 
   // Surf detector initialization
   int minHessian = 400;
   cv::SurfFeatureDetector detector( minHessian );
+  cv::SurfDescriptorExtractor extractor;
 
   // Get and verify image data
   vtkImageData* data = sv_node->GetImageData();
@@ -135,7 +155,7 @@ void vtkSlicerSurfFeaturesLogic::displayFeatures(vtkMRMLNode* node)
   ofs << "Data scalar type: " << data->GetScalarTypeAsString() << std::endl << "Data type int: " << data->GetScalarType() << std::endl;
   //*/ 
 
-  
+  // Export data to a c pointer
   vtkImageExport *exporter = vtkImageExport::New();
   exporter->SetInput(croppedData);
   croppedData->GetDimensions(dims);
@@ -144,19 +164,22 @@ void vtkSlicerSurfFeaturesLogic::displayFeatures(vtkMRMLNode* node)
   unsigned char* char_ptr = (unsigned char*) void_ptr;
   exporter->SetExportVoidPointer(void_ptr);
   exporter->Export();
-  unsigned char* c_data = (unsigned char*)exporter->GetExportVoidPointer();
 
+  // Data as opencv matrix
   cv::Mat mat(dims[1],dims[0],CV_8U ,void_ptr);
 
   std::vector<cv::KeyPoint> keypoints;
-
-
   clock_t startTime = clock();
   detector.detect(mat,keypoints);
+  cv::Mat descriptors;
+  extractor.compute(mat, keypoints, descriptors);
+  this->descriptorDatabase.push_back(descriptors);
   clock_t endTime = clock();
   clock_t clockTicksTaken = endTime - startTime;
   double timeInSeconds = clockTicksTaken / (double) CLOCKS_PER_SEC;
-  ofs << "time taken for feature detector: " << timeInSeconds << " seconds." << std::endl;
+  std::ostringstream oss;
+  oss << "time taken for feature detector: <font color='#FF0000'>" << timeInSeconds << "</font> seconds.<br>";
+  this->console->insertHtml(oss.str().c_str());
   
   
 
@@ -177,6 +200,17 @@ void vtkSlicerSurfFeaturesLogic::displayFeatures(vtkMRMLNode* node)
   free(void_ptr);
 }
 
+void vtkSlicerSurfFeaturesLogic::matchImageToDatabase(vtkMRMLNode* node)
+{
+  vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(node);
+
+  this->flannMatcher.clear();
+  this->flannMatcher.add(this->descriptorDatabase);
+  std::vector<std::vector<cv::DMatch> > matches;
+  //this->flannMatcher.knnMatch(descriptors,matches,3);
+
+}
+
 void vtkSlicerSurfFeaturesLogic
 ::ProcessMRMLNodesEvents( vtkObject* caller, unsigned long event, void * callData )
 {
@@ -195,7 +229,6 @@ void vtkSlicerSurfFeaturesLogic
     clock_t clockTicksTaken = now - this->lastImageModified;
     this->lastImageModified = now;
     double timeInSeconds = clockTicksTaken / (double) CLOCKS_PER_SEC;
-    ofs << "time since last image modified " << timeInSeconds << " seconds." << std::endl;
     vtkMRMLScalarVolumeNode* scalarNode = vtkMRMLScalarVolumeNode::SafeDownCast( caller );
     this->displayFeatures(scalarNode);
   }
@@ -222,3 +255,20 @@ void vtkSlicerSurfFeaturesLogic::setObservedNode(vtkMRMLScalarVolumeNode *snode)
   this->EndModify( wasModifying );
 }
 
+void vtkSlicerSurfFeaturesLogic::toggleRecord()
+{
+  this->recording = !this->recording;
+  std::ostringstream oss;
+  oss << "Toggling recording to " << this->recording << "<br>";
+  this->console->insertHtml(oss.str().c_str());
+}
+
+void vtkSlicerSurfFeaturesLogic::match()
+{
+  this->matchNext = true;
+}
+
+void vtkSlicerSurfFeaturesLogic::setConsole(QTextEdit* console)
+{
+  this->console = console;
+}

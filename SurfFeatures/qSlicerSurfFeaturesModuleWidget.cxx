@@ -84,6 +84,11 @@ void qSlicerSurfFeaturesModuleWidget::setup()
   this->Superclass::setup();
 
   connect(d->InputVolumeComboBox, SIGNAL(currentNodeChanged(vtkMRMLNode*)), this, SLOT(onVolumeSelect(vtkMRMLNode*)));
+  connect(d->recordButton, SIGNAL(clicked()),this, SLOT(toggleRecord()));
+  connect(d->matchButton, SIGNAL(clicked()), this, SLOT(match()));
+
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  logic->setConsole(d->consoleDebug);
 }
 
 void qSlicerSurfFeaturesModuleWidget::onVolumeSelect(vtkMRMLNode* node)
@@ -95,5 +100,19 @@ void qSlicerSurfFeaturesModuleWidget::onVolumeSelect(vtkMRMLNode* node)
   logic->setObservedNode(snode);
   //logic->displayFeatures(node);
   
+}
+
+void qSlicerSurfFeaturesModuleWidget::toggleRecord()
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  logic->toggleRecord();
+}
+
+void qSlicerSurfFeaturesModuleWidget::match()
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  logic->match();
 }
 

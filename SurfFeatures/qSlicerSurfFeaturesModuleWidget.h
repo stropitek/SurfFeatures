@@ -40,8 +40,8 @@ public:
 
 public slots:
   void onVolumeSelect(vtkMRMLNode*);
-
-
+  void toggleRecord();
+  void match();
 
 protected:
   QScopedPointer<qSlicerSurfFeaturesModuleWidgetPrivate> d_ptr;
