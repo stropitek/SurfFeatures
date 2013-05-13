@@ -57,11 +57,54 @@
           <property name="selectNodeUponCreation">
            <bool>true</bool>
           </property>
+          <property name="noneEnabled">
+           <bool>true</bool>
+          </property>
           <property name="addEnabled">
            <bool>true</bool>
           </property>
           <property name="removeEnabled">
            <bool>true</bool>
+          </property>
+          <property name="renameEnabled">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="label">
+          <property name="text">
+           <string>Input Tracker:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="qMRMLNodeComboBox" name="InputTrackerComboBox">
+          <property name="enabled">
+           <bool>true</bool>
+          </property>
+          <property name="nodeTypes">
+           <stringlist>
+            <string>vtkMRMLLinearTransformNode</string>
+           </stringlist>
+          </property>
+          <property name="showHidden">
+           <bool>false</bool>
+          </property>
+          <property name="selectNodeUponCreation">
+           <bool>true</bool>
+          </property>
+          <property name="noneEnabled">
+           <bool>true</bool>
+          </property>
+          <property name="addEnabled">
+           <bool>true</bool>
+          </property>
+          <property name="removeEnabled">
+           <bool>true</bool>
+          </property>
+          <property name="editEnabled">
+           <bool>false</bool>
           </property>
           <property name="renameEnabled">
            <bool>true</bool>
@@ -153,6 +196,22 @@
     <hint type="destinationlabel">
      <x>20</x>
      <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>qSlicerSurfFeaturesModuleWidget</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>InputTrackerComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>234</x>
+     <y>202</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>138</x>
+     <y>99</y>
     </hint>
    </hints>
   </connection>

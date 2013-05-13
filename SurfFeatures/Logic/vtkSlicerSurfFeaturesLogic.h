@@ -29,6 +29,7 @@
 
 // MRML includes
 #include "vtkMRMLScalarVolumeNode.h"
+#include "vtkMRMLLinearTransformNode.h"
 
 // STD includes
 #include <cstdlib>
@@ -57,6 +58,9 @@ public:
 
   void displayFeatures(vtkMRMLNode*);
   void setObservedNode(vtkMRMLScalarVolumeNode* snode);
+  void setObservedNode(vtkMRMLLinearTransformNode* tnode);
+  void removeObservedVolume();
+  void removeObservedTransform();
   void toggleRecord();
   void match();
   void setConsole(QTextEdit* console);
@@ -80,12 +84,17 @@ private:
 
   void recordData(vtkMRMLNode* node);
   void matchImageToDatabase(vtkMRMLNode* node);
+  void stopWatchWrite(std::ostringstream& oss);
+  void resetConsoleFont();
 
   // Attributes
 private:
-  vtkMRMLScalarVolumeNode* observedNode;
+  vtkMRMLScalarVolumeNode* observedVolume;
+  vtkMRMLLinearTransformNode* observedTransform;
   clock_t lastImageModified;
   clock_t initSurf;
+  clock_t initTime;
+  clock_t lastStopWatch;
   bool recording;
   bool matchNext;
   cv::FlannBasedMatcher flannMatcher;

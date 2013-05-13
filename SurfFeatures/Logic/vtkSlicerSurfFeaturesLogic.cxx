@@ -40,7 +40,8 @@
 // OpenCV includes
 #include "opencv2/core/core.hpp"
 #include "opencv2/highgui/highgui.hpp"
-#include <opencv2/nonfree/features2d.hpp>
+#include "opencv2/nonfree/features2d.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
 
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerSurfFeaturesLogic);
@@ -48,8 +49,11 @@ vtkStandardNewMacro(vtkSlicerSurfFeaturesLogic);
 //----------------------------------------------------------------------------
 vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
 {
-  this->observedNode = NULL;
+  this->observedVolume = NULL;
+  this->observedTransform = NULL;
   this->lastImageModified = clock();
+  this->lastStopWatch = clock();
+  this->initTime = clock();
   this->recording = false;
   this->matchNext = false;
 }
@@ -131,7 +135,7 @@ void vtkSlicerSurfFeaturesLogic::recordData(vtkMRMLNode* node)
   int minHessian = 400;
   cv::SurfFeatureDetector detector( minHessian );
   cv::SurfDescriptorExtractor extractor;
-
+  
   // Get and verify image data
   vtkImageData* data = sv_node->GetImageData();
   if(!data)
@@ -171,6 +175,17 @@ void vtkSlicerSurfFeaturesLogic::recordData(vtkMRMLNode* node)
   std::vector<cv::KeyPoint> keypoints;
   clock_t startTime = clock();
   detector.detect(mat,keypoints);
+  //for(int i = 0; i<keypoints.size(); i++){
+  //  cv::Point2f p = keypoints[i].pt;
+  //  int loc[3] = { (int)p.x, (int)(p.y), 1};
+  //  double point[3];
+  //  vtkIdType id = croppedData->ComputePointId(loc);
+  //  croppedData->GetPoint(id,point);
+  //  std::ostringstream oss;
+  //  oss << "Keypoint (" << loc[0] << "," << loc[1] << "," << loc[2] << ") ";
+  //  oss << "--> data (" << point[0] << "," << point[1] << "," << point[2] << ") " << this->stopWatchWrite() << "<br>";
+  //  this->console->insertPlainText(oss.str().c_str());
+  //}
   cv::Mat descriptors;
   extractor.compute(mat, keypoints, descriptors);
   this->descriptorDatabase.push_back(descriptors);
@@ -178,8 +193,9 @@ void vtkSlicerSurfFeaturesLogic::recordData(vtkMRMLNode* node)
   clock_t clockTicksTaken = endTime - startTime;
   double timeInSeconds = clockTicksTaken / (double) CLOCKS_PER_SEC;
   std::ostringstream oss;
-  oss << "time taken for feature detector: <font color='#FF0000'>" << timeInSeconds << "</font> seconds.<br>";
-  this->console->insertHtml(oss.str().c_str());
+  oss << "time taken for feature detector: " << timeInSeconds << " seconds.";
+  //this->stopWatchWrite(oss);
+  //this->console->insertPlainText(oss.str().c_str());
   
   
 
@@ -219,48 +235,101 @@ void vtkSlicerSurfFeaturesLogic
     return;
     }
   
-  if (  event != vtkMRMLVolumeNode::ImageDataModifiedEvent )
-    {
-    this->Superclass::ProcessMRMLNodesEvents( caller, event, callData );
-    }
-  else
+  if(event == vtkMRMLVolumeNode::ImageDataModifiedEvent)
   {
-    clock_t now = clock();
-    clock_t clockTicksTaken = now - this->lastImageModified;
-    this->lastImageModified = now;
-    double timeInSeconds = clockTicksTaken / (double) CLOCKS_PER_SEC;
-    vtkMRMLScalarVolumeNode* scalarNode = vtkMRMLScalarVolumeNode::SafeDownCast( caller );
-    this->displayFeatures(scalarNode);
+    if(this->recording){
+      std::ostringstream oss;
+      oss << "New ImageDataModifiedEvent";
+      this->stopWatchWrite(oss);
+      this->console->insertPlainText(oss.str().c_str());
+    }
+    //clock_t now = clock();
+    //clock_t clockTicksTaken = now - this->lastImageModified;
+    //this->lastImageModified = now;
+    //double timeInSeconds = clockTicksTaken / (double) CLOCKS_PER_SEC;
+    //vtkMRMLScalarVolumeNode* scalarNode = vtkMRMLScalarVolumeNode::SafeDownCast( caller );
+    //this->displayFeatures(scalarNode);
   }
+  else if(event == vtkMRMLLinearTransformNode::TransformModifiedEvent)
+  {
+    if(this->recording){
+      std::ostringstream oss;
+      oss << "New TransformModifiedEvent ";
+      this->stopWatchWrite(oss);
+      this->console->insertPlainText(oss.str().c_str());
+    }
+  }
+  else
+    this->Superclass::ProcessMRMLNodesEvents( caller, event, callData );
 }
 
 void vtkSlicerSurfFeaturesLogic::setObservedNode(vtkMRMLScalarVolumeNode *snode)
 {
-  if(snode==this->observedNode)
+  if(snode==this->observedVolume)
     return;
-  if(!snode)
+  if(!snode){
+    this->removeObservedVolume();
     return;
+  }
 
   int wasModifying = this->StartModify();
-  if(this->observedNode)
-    vtkSetAndObserveMRMLNodeMacro( this->observedNode, 0 );
+  if(this->observedVolume)
+    vtkSetAndObserveMRMLNodeMacro( this->observedVolume, 0 );
 
   vtkMRMLScalarVolumeNode* newNode = NULL;
   vtkSmartPointer< vtkIntArray > events = vtkSmartPointer< vtkIntArray >::New();
   //events->InsertNextValue( vtkCommand::ModifiedEvent );
   events->InsertNextValue( vtkMRMLVolumeNode::ImageDataModifiedEvent );
   vtkSetAndObserveMRMLNodeEventsMacro( newNode, snode, events );
-  this->observedNode = newNode;
+  this->observedVolume = newNode;
   
   this->EndModify( wasModifying );
 }
 
+void vtkSlicerSurfFeaturesLogic::setObservedNode(vtkMRMLLinearTransformNode *tnode)
+{
+  if(tnode==this->observedTransform)
+    return;
+  if(!tnode){
+    this->removeObservedTransform();
+    return;
+  }
+
+  int wasModifying = this->StartModify();
+  if(this->observedTransform)
+    vtkSetAndObserveMRMLNodeMacro(this->observedTransform, 0);
+
+  vtkMRMLLinearTransformNode* newNode = NULL;
+  vtkSmartPointer< vtkIntArray > events = vtkSmartPointer< vtkIntArray >::New();
+  events->InsertNextValue(vtkMRMLTransformableNode::TransformModifiedEvent);
+  vtkSetAndObserveMRMLNodeEventsMacro(newNode,tnode,events);
+  this->observedTransform = newNode;
+
+  this->EndModify(wasModifying);
+}
+
+void vtkSlicerSurfFeaturesLogic::removeObservedVolume()
+{
+  if(this->observedVolume)
+    vtkSetAndObserveMRMLNodeMacro( this->observedVolume, 0 );
+  this->observedVolume = NULL;
+}
+
+void vtkSlicerSurfFeaturesLogic::removeObservedTransform()
+{
+  if(this->observedTransform)
+    vtkSetAndObserveMRMLNodeMacro( this->observedTransform, 0 );
+  this->observedTransform = NULL;
+}
+
 void vtkSlicerSurfFeaturesLogic::toggleRecord()
 {
+  this->resetConsoleFont();
   this->recording = !this->recording;
   std::ostringstream oss;
-  oss << "Toggling recording to " << this->recording << "<br>";
-  this->console->insertHtml(oss.str().c_str());
+  oss << "Toggling recording to " << this->recording;
+  this->stopWatchWrite(oss);
+  this->console->insertPlainText(oss.str().c_str());
 }
 
 void vtkSlicerSurfFeaturesLogic::match()
@@ -271,4 +340,28 @@ void vtkSlicerSurfFeaturesLogic::match()
 void vtkSlicerSurfFeaturesLogic::setConsole(QTextEdit* console)
 {
   this->console = console;
+  this->resetConsoleFont();
+}
+
+void vtkSlicerSurfFeaturesLogic::stopWatchWrite(std::ostringstream& oss)
+{
+  clock_t endTime = clock();
+  double timeInSeconds = (endTime - this->initTime) / (double) CLOCKS_PER_SEC;
+  double intervalInMiliSeconds = (endTime - this->lastStopWatch)/(double) CLOCKS_PER_SEC * 1000;
+  std::string output = oss.str();
+  int iSpaces = 50 - output.size();
+  std::string spaces("");
+  if(iSpaces > 0)
+  {
+    spaces = std::string(iSpaces,' ');
+  }
+  oss << spaces << "-- " << timeInSeconds  << " s -- + " << intervalInMiliSeconds << " ms --" << std::endl;
+  this->lastStopWatch = endTime;
+}
+
+void vtkSlicerSurfFeaturesLogic::resetConsoleFont()
+{
+  QFont font("Courier",8);
+  font.setStretch(QFont::UltraCondensed);
+  this->console->setCurrentFont(font);
 }

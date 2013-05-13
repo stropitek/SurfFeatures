@@ -40,6 +40,7 @@ public:
 
 public slots:
   void onVolumeSelect(vtkMRMLNode*);
+  void onTrackerSelect(vtkMRMLNode*);
   void toggleRecord();
   void match();
 

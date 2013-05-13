@@ -84,6 +84,7 @@ void qSlicerSurfFeaturesModuleWidget::setup()
   this->Superclass::setup();
 
   connect(d->InputVolumeComboBox, SIGNAL(currentNodeChanged(vtkMRMLNode*)), this, SLOT(onVolumeSelect(vtkMRMLNode*)));
+  connect(d->InputTrackerComboBox, SIGNAL(currentNodeChanged(vtkMRMLNode*)),this, SLOT(onTrackerSelect(vtkMRMLNode*)));
   connect(d->recordButton, SIGNAL(clicked()),this, SLOT(toggleRecord()));
   connect(d->matchButton, SIGNAL(clicked()), this, SLOT(match()));
 
@@ -98,8 +99,15 @@ void qSlicerSurfFeaturesModuleWidget::onVolumeSelect(vtkMRMLNode* node)
   vtkSlicerSurfFeaturesLogic* logic = d->logic();
   vtkMRMLScalarVolumeNode* snode = vtkMRMLScalarVolumeNode::SafeDownCast(node);
   logic->setObservedNode(snode);
-  //logic->displayFeatures(node);
-  
+}
+
+void qSlicerSurfFeaturesModuleWidget::onTrackerSelect(vtkMRMLNode* node)
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  Q_ASSERT(d->InputTrackerComboBox);
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  vtkMRMLLinearTransformNode* tnode = vtkMRMLLinearTransformNode::SafeDownCast(node);
+  logic->setObservedNode(tnode);
 }
 
 void qSlicerSurfFeaturesModuleWidget::toggleRecord()
