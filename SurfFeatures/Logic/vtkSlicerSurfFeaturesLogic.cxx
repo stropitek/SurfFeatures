@@ -23,6 +23,8 @@
 // VTK includes
 #include <vtkNew.h>
 #include <vtkExtractVOI.h>
+#include <vtkImageData.h>
+#include <vtkImageExport.h>
 
 // STD includes
 #include <cassert>
@@ -34,14 +36,20 @@
 // MRML includes
 #include <vtkMRMLVolumeNode.h>
 #include <vtkMRMLScalarVolumeNode.h>
-#include <vtkImageData.h>
-#include <vtkImageExport.h>
+#include <vtkMRMLAnnotationFiducialNode.h>
+
 
 // OpenCV includes
+#include <cv.h>
 #include "opencv2/core/core.hpp"
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/nonfree/features2d.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
+#include "opencv2/contrib/contrib.hpp"
+#include "opencv2/objdetect/objdetect.hpp"
+#include <opencv2/imgproc/imgproc_c.h>
+#include "opencv2/nonfree/gpu.hpp"
+
 
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerSurfFeaturesLogic);
@@ -56,6 +64,7 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->initTime = clock();
   this->recording = false;
   this->matchNext = false;
+  this->minHessian = 400;
 }
 
 //----------------------------------------------------------------------------
@@ -127,54 +136,60 @@ void vtkSlicerSurfFeaturesLogic::displayFeatures(vtkMRMLNode* node)
   }
 }
 
-void vtkSlicerSurfFeaturesLogic::recordData(vtkMRMLNode* node)
+vtkImageData* vtkSlicerSurfFeaturesLogic::cropData(vtkImageData* data)
 {
-  vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(node);
-
-  // Surf detector initialization
-  int minHessian = 400;
-  cv::SurfFeatureDetector detector( minHessian );
-  cv::SurfDescriptorExtractor extractor;
-  
-  // Get and verify image data
-  vtkImageData* data = sv_node->GetImageData();
-  if(!data)
-    return;
-
-  // Get image dimensions
   int dims[3];
   data->GetDimensions(dims);
-
-  // Crop image
   vtkSmartPointer<vtkExtractVOI> extractVOI = vtkExtractVOI::New();
   extractVOI->SetInput(data);
   extractVOI->SetVOI(dims[0]/5.,3.*dims[0]/3.9,dims[1]/6,3.*dims[1]/4, 0, 0);
   extractVOI->SetSampleRate(1,1,1);
   extractVOI->Update();
-  vtkImageData* croppedData = extractVOI->GetOutput();
+  return extractVOI->GetOutput();
+}
 
-  /*
-  ofs << "Node class name: " << node->GetClassName() << std::endl;
-  ofs << "Data dimensions " << dims[0] << " " << dims[1] << " " << dims[2] << std::endl;
-  ofs << "Data scalar type: " << data->GetScalarTypeAsString() << std::endl << "Data type int: " << data->GetScalarType() << std::endl;
-  //*/ 
-
-  // Export data to a c pointer
-  vtkImageExport *exporter = vtkImageExport::New();
-  exporter->SetInput(croppedData);
-  croppedData->GetDimensions(dims);
+cv::Mat vtkSlicerSurfFeaturesLogic::convertImage(vtkImageData* data)
+{
+  vtkSmartPointer<vtkImageExport> exporter = vtkSmartPointer<vtkImageExport>::New();
+  exporter->SetInput(data);
+  int dims[3];
+  data->GetDimensions(dims);
   int numel = dims[0]*dims[1]*dims[2];
   void* void_ptr = malloc(numel);
   unsigned char* char_ptr = (unsigned char*) void_ptr;
   exporter->SetExportVoidPointer(void_ptr);
   exporter->Export();
 
-  // Data as opencv matrix
-  cv::Mat mat(dims[1],dims[0],CV_8U ,void_ptr);
+  cv::Mat ocvImage(dims[1],dims[0],CV_8U ,void_ptr);
+  free(void_ptr);
+  return ocvImage;
+}
 
+void vtkSlicerSurfFeaturesLogic::recordData(vtkMRMLNode* node)
+{
+  // Verify image data
+  vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(node);
+  vtkImageData* data = sv_node->GetImageData();
+  if(!data)
+    return;
+
+  // Crop, then convert to opencv matrix
+  vtkImageData* croppedData = this->cropData(data);
+  cv::Mat ocvData = this->convertImage(croppedData);
+
+  
+
+  // GPU implementation
+  //cv::gpu::GpuMat keypointsGPU;
+  //cv::gpu::GpuMat descriptorsGPU;
+  //cv::gpu::SURF_GPU surf;
+  //cv::gpu::GpuMat gpuMat(mat);
+  //surf(gpuMat, cv::gpu::GpuMat(), keypointsGPU, descriptorsGPU);
+
+  // Detect keypoints (time consuming part)
+  cv::SurfFeatureDetector detector(this->minHessian);
   std::vector<cv::KeyPoint> keypoints;
-  clock_t startTime = clock();
-  detector.detect(mat,keypoints);
+  detector.detect(ocvData,keypoints);
   //for(int i = 0; i<keypoints.size(); i++){
   //  cv::Point2f p = keypoints[i].pt;
   //  int loc[3] = { (int)p.x, (int)(p.y), 1};
@@ -186,19 +201,12 @@ void vtkSlicerSurfFeaturesLogic::recordData(vtkMRMLNode* node)
   //  oss << "--> data (" << point[0] << "," << point[1] << "," << point[2] << ") " << this->stopWatchWrite() << "<br>";
   //  this->console->insertPlainText(oss.str().c_str());
   //}
-  cv::Mat descriptors;
-  extractor.compute(mat, keypoints, descriptors);
-  this->descriptorDatabase.push_back(descriptors);
-  clock_t endTime = clock();
-  clock_t clockTicksTaken = endTime - startTime;
-  double timeInSeconds = clockTicksTaken / (double) CLOCKS_PER_SEC;
-  std::ostringstream oss;
-  oss << "time taken for feature detector: " << timeInSeconds << " seconds.";
-  //this->stopWatchWrite(oss);
-  //this->console->insertPlainText(oss.str().c_str());
-  
-  
 
+  // Get keypoints' surf descriptors
+  cv::SurfDescriptorExtractor extractor;
+  cv::Mat descriptors;
+  extractor.compute(ocvData, keypoints, descriptors);
+  this->descriptorDatabase.push_back(descriptors);
  
 
   /*//
@@ -212,18 +220,35 @@ void vtkSlicerSurfFeaturesLogic::recordData(vtkMRMLNode* node)
 
   cv::waitKey(0);
   //*/
-
-  free(void_ptr);
 }
 
 void vtkSlicerSurfFeaturesLogic::matchImageToDatabase(vtkMRMLNode* node)
 {
+  // Verify image data
   vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(node);
+  vtkImageData* data = sv_node->GetImageData();
+  if(!data)
+    return;
 
-  this->flannMatcher.clear();
-  this->flannMatcher.add(this->descriptorDatabase);
+  // Crop, then convert to opencv matrix
+  vtkImageData* croppedData = this->cropData(data);
+  cv::Mat ocvData = this->convertImage(croppedData);
+
+  // Get the descriptor of the current image
+  cv::SurfFeatureDetector detector(this->minHessian);
+  std::vector<cv::KeyPoint> keypoints;
+  detector.detect(ocvData,keypoints);
+
+  // Get keypoints' surf descriptors
+  cv::SurfDescriptorExtractor extractor;
+  cv::Mat descriptors;
+  extractor.compute(ocvData, keypoints, descriptors);
+
+  // Add train data if does not already exist
+  if(this->flannMatcher.empty())
+    this->flannMatcher.add(this->descriptorDatabase);
   std::vector<std::vector<cv::DMatch> > matches;
-  //this->flannMatcher.knnMatch(descriptors,matches,3);
+  this->flannMatcher.knnMatch(descriptors,matches,3);
 
 }
 
@@ -243,12 +268,13 @@ void vtkSlicerSurfFeaturesLogic
       this->stopWatchWrite(oss);
       this->console->insertPlainText(oss.str().c_str());
     }
-    //clock_t now = clock();
-    //clock_t clockTicksTaken = now - this->lastImageModified;
-    //this->lastImageModified = now;
-    //double timeInSeconds = clockTicksTaken / (double) CLOCKS_PER_SEC;
-    //vtkMRMLScalarVolumeNode* scalarNode = vtkMRMLScalarVolumeNode::SafeDownCast( caller );
-    //this->displayFeatures(scalarNode);
+    clock_t now = clock();
+    clock_t clockTicksTaken = now - this->lastImageModified;
+    this->lastImageModified = now;
+    double timeInSeconds = clockTicksTaken / (double) CLOCKS_PER_SEC;
+    vtkMRMLScalarVolumeNode* scalarNode = vtkMRMLScalarVolumeNode::SafeDownCast( caller );
+    this->displayFeatures(scalarNode);
+    
   }
   else if(event == vtkMRMLLinearTransformNode::TransformModifiedEvent)
   {

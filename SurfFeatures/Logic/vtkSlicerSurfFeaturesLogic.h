@@ -86,6 +86,8 @@ private:
   void matchImageToDatabase(vtkMRMLNode* node);
   void stopWatchWrite(std::ostringstream& oss);
   void resetConsoleFont();
+  vtkImageData* cropData(vtkImageData* data);
+  cv::Mat convertImage(vtkImageData* data);
 
   // Attributes
 private:
@@ -100,6 +102,7 @@ private:
   cv::FlannBasedMatcher flannMatcher;
   std::vector<cv::Mat> descriptorDatabase;
   QTextEdit* console;
+  int minHessian;
 };
 
 #endif
