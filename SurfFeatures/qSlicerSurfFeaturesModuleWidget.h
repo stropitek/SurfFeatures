@@ -43,6 +43,9 @@ public slots:
   void onTrackerSelect(vtkMRMLNode*);
   void toggleRecord();
   void match();
+  void setMinHessian(int);
+  void showNextImage();
+  void matchWithNextImage();
 
 protected:
   QScopedPointer<qSlicerSurfFeaturesModuleWidgetPrivate> d_ptr;

@@ -85,8 +85,11 @@ void qSlicerSurfFeaturesModuleWidget::setup()
 
   connect(d->InputVolumeComboBox, SIGNAL(currentNodeChanged(vtkMRMLNode*)), this, SLOT(onVolumeSelect(vtkMRMLNode*)));
   connect(d->InputTrackerComboBox, SIGNAL(currentNodeChanged(vtkMRMLNode*)),this, SLOT(onTrackerSelect(vtkMRMLNode*)));
+  connect(d->minHessianSpinBox, SIGNAL(valueChanged(int)), this, SLOT(setMinHessian(int)));
   connect(d->recordButton, SIGNAL(clicked()),this, SLOT(toggleRecord()));
   connect(d->matchButton, SIGNAL(clicked()), this, SLOT(match()));
+  connect(d->showNextImageButton, SIGNAL(clicked()), this, SLOT(showNextImage()));
+  connect(d->matchWithNextButton, SIGNAL(clicked()), this, SLOT(matchWithNextImage()));
 
   vtkSlicerSurfFeaturesLogic* logic = d->logic();
   logic->setConsole(d->consoleDebug);
@@ -115,6 +118,10 @@ void qSlicerSurfFeaturesModuleWidget::toggleRecord()
   Q_D(qSlicerSurfFeaturesModuleWidget);
   vtkSlicerSurfFeaturesLogic* logic = d->logic();
   logic->toggleRecord();
+  if(d->recordButton->isChecked())
+    d->recordButton->setText("Stop Recording");
+  else
+    d->recordButton->setText("Start Recording");
 }
 
 void qSlicerSurfFeaturesModuleWidget::match()
@@ -124,3 +131,23 @@ void qSlicerSurfFeaturesModuleWidget::match()
   logic->match();
 }
 
+void qSlicerSurfFeaturesModuleWidget::setMinHessian(int minHessian)
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  logic->setMinHessian(minHessian);
+}
+
+void qSlicerSurfFeaturesModuleWidget::showNextImage()
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  logic->showNextImage();
+}
+
+void qSlicerSurfFeaturesModuleWidget::matchWithNextImage()
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  logic->matchWithNextImage();
+}

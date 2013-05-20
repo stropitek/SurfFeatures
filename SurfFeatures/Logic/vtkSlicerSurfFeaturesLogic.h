@@ -64,6 +64,9 @@ public:
   void toggleRecord();
   void match();
   void setConsole(QTextEdit* console);
+  void setMinHessian(int);
+  void showNextImage();
+  void matchWithNextImage();
 
 protected:
   vtkSlicerSurfFeaturesLogic();
@@ -87,7 +90,11 @@ private:
   void stopWatchWrite(std::ostringstream& oss);
   void resetConsoleFont();
   vtkImageData* cropData(vtkImageData* data);
-  cv::Mat convertImage(vtkImageData* data);
+  cv::Mat convertImage(vtkImageData* data, void* void_ptr);                                                  
+  void showImage(vtkMRMLNode* node);
+  void showMatchWithImage(vtkMRMLNode* node);
+  void computeKeypointsAndDescriptors(const cv::Mat& data, std::vector<cv::KeyPoint>& keypoints, cv::Mat& descriptors);
+  bool isTracked(vtkMRMLNode* node);
 
   // Attributes
 private:
@@ -99,10 +106,18 @@ private:
   clock_t lastStopWatch;
   bool recording;
   bool matchNext;
+  bool showNextImg;
+  bool matchWithNextImg;
   cv::FlannBasedMatcher flannMatcher;
   std::vector<cv::Mat> descriptorDatabase;
+  std::vector<std::vector<cv::KeyPoint> > keypointsDatabase;
+  cv::Mat lastDescriptor;
+  cv::Mat lastImage;
+  std::vector<cv::KeyPoint> lastKeypoints;
   QTextEdit* console;
   int minHessian;
 };
+
+
 
 #endif
