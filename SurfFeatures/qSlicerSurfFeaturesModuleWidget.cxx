@@ -27,7 +27,7 @@
 
 // Logic
 #include "vtkSlicerSurfFeaturesLogic.h"
-
+#include "util_macros.h"
 
 //-----------------------------------------------------------------------------
 /// \ingroup Slicer_QtModules_ExtensionTemplate
@@ -83,72 +83,60 @@ void qSlicerSurfFeaturesModuleWidget::setup()
   d->setupUi(this);
   this->Superclass::setup();
 
-  connect(d->InputVolumeComboBox, SIGNAL(currentNodeChanged(vtkMRMLNode*)), this, SLOT(onVolumeSelect(vtkMRMLNode*)));
-  connect(d->InputTrackerComboBox, SIGNAL(currentNodeChanged(vtkMRMLNode*)),this, SLOT(onTrackerSelect(vtkMRMLNode*)));
-  connect(d->minHessianSpinBox, SIGNAL(valueChanged(int)), this, SLOT(setMinHessian(int)));
-  connect(d->recordButton, SIGNAL(clicked()),this, SLOT(toggleRecord()));
-  connect(d->showNextImageButton, SIGNAL(clicked()), this, SLOT(showNextImage()));
-  connect(d->matchWithNextButton, SIGNAL(clicked()), this, SLOT(matchWithNextImage()));
+  connect(d->minHessianSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onMinHessianChanged(int)));
+
   connect(d->bogusPathLineEdit, SIGNAL(currentPathChanged(const QString&)), this, SLOT(onBogusPathChanged(const QString&)));
+  connect(d->trainPathLineEdit, SIGNAL(currentPathChanged(const QString&)), this, SLOT(onTrainPathChanged(const QString&)));
+  connect(d->queryPathLineEdit, SIGNAL(currentPathChanged(const QString&)), this, SLOT(onQueryPathChanged(const QString&)));
+
+  connect(d->bogusFromSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onBogusStartFrameChanged(int)));
+  connect(d->bogusToSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onBogusStopFrameChanged(int)));
+  connect(d->trainFromSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onTrainStartFrameChanged(int)));
+  connect(d->trainToSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onTrainStopFrameChanged(int)));
+  connect(d->queryFromSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onQueryStartFrameChanged(int)));
+  connect(d->queryToSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onQueryStopFrameChanged(int)));
+
+  connect(d->computeBogusButton, SIGNAL(clicked()), this, SLOT(onComputeBogus()));
+  connect(d->computeTrainButton, SIGNAL(clicked()), this, SLOT(onComputeTrain()));
+  connect(d->computeQueryButton, SIGNAL(clicked()), this, SLOT(onComputeQuery()));
   
 
   vtkSlicerSurfFeaturesLogic* logic = d->logic();
   logic->setConsole(d->consoleDebug);
 }
 
-void qSlicerSurfFeaturesModuleWidget::onVolumeSelect(vtkMRMLNode* node)
+
+SLOTDEF_1(int,onMinHessianChanged, setMinHessian);
+
+SLOTDEF_1(int,onTrainStartFrameChanged,setTrainStartFrame);
+SLOTDEF_1(int,onBogusStartFrameChanged,setBogusStartFrame);
+SLOTDEF_1(int,onQueryStartFrameChanged,setQueryStartFrame);
+SLOTDEF_1(int,onTrainStopFrameChanged,setTrainStopFrame);
+SLOTDEF_1(int,onBogusStopFrameChanged,setBogusStopFrame);
+SLOTDEF_1(int,onQueryStopFrameChanged,setQueryStopFrame);
+
+
+SLOTDEF_0(onComputeBogus,computeBogus);
+SLOTDEF_0(onComputeTrain,computeTrain);
+SLOTDEF_0(onComputeQuery,computeQuery);
+
+void qSlicerSurfFeaturesModuleWidget::onTrainPathChanged(const QString& path)
 {
   Q_D(qSlicerSurfFeaturesModuleWidget);
-  Q_ASSERT(d->InputVolumeComboBox);
   vtkSlicerSurfFeaturesLogic* logic = d->logic();
-  vtkMRMLScalarVolumeNode* snode = vtkMRMLScalarVolumeNode::SafeDownCast(node);
-  logic->setObservedNode(snode);
+  logic->setTrainFile(path.toStdString());
 }
 
-void qSlicerSurfFeaturesModuleWidget::onTrackerSelect(vtkMRMLNode* node)
-{
-  Q_D(qSlicerSurfFeaturesModuleWidget);
-  Q_ASSERT(d->InputTrackerComboBox);
-  vtkSlicerSurfFeaturesLogic* logic = d->logic();
-  vtkMRMLLinearTransformNode* tnode = vtkMRMLLinearTransformNode::SafeDownCast(node);
-  logic->setObservedNode(tnode);
-}
-
-void qSlicerSurfFeaturesModuleWidget::toggleRecord()
+void qSlicerSurfFeaturesModuleWidget::onQueryPathChanged(const QString& path)
 {
   Q_D(qSlicerSurfFeaturesModuleWidget);
   vtkSlicerSurfFeaturesLogic* logic = d->logic();
-  logic->toggleRecord();
-  if(d->recordButton->isChecked())
-    d->recordButton->setText("Stop Recording");
-  else
-    d->recordButton->setText("Start Recording");
-}
-
-void qSlicerSurfFeaturesModuleWidget::setMinHessian(int minHessian)
-{
-  Q_D(qSlicerSurfFeaturesModuleWidget);
-  vtkSlicerSurfFeaturesLogic* logic = d->logic();
-  logic->setMinHessian(minHessian);
-}
-
-void qSlicerSurfFeaturesModuleWidget::showNextImage()
-{
-  Q_D(qSlicerSurfFeaturesModuleWidget);
-  vtkSlicerSurfFeaturesLogic* logic = d->logic();
-  logic->showNextImage();
-}
-
-void qSlicerSurfFeaturesModuleWidget::matchWithNextImage()
-{
-  Q_D(qSlicerSurfFeaturesModuleWidget);
-  vtkSlicerSurfFeaturesLogic* logic = d->logic();
-  logic->matchWithNextImage();
+  logic->setQueryFile(path.toStdString());
 }
 
 void qSlicerSurfFeaturesModuleWidget::onBogusPathChanged(const QString& path)
 {
   Q_D(qSlicerSurfFeaturesModuleWidget);
   vtkSlicerSurfFeaturesLogic* logic = d->logic();
-  logic->changeBogusFile(path.toStdString());
+  logic->setBogusFile(path.toStdString());
 }

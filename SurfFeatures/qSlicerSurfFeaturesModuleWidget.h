@@ -20,11 +20,15 @@
 
 // SlicerQt includes
 #include "qSlicerAbstractModuleWidget.h"
-
 #include "qSlicerSurfFeaturesModuleExport.h"
 
+#include <QString>
+
 class qSlicerSurfFeaturesModuleWidgetPrivate;
+class qSlicerSurfFeaturesModuleWidget;
 class vtkMRMLNode;
+
+
 
 /// \ingroup Slicer_QtModules_ExtensionTemplate
 class Q_SLICER_QTMODULES_SURFFEATURES_EXPORT qSlicerSurfFeaturesModuleWidget :
@@ -39,13 +43,20 @@ public:
   virtual ~qSlicerSurfFeaturesModuleWidget();
 
 public slots:
-  void onVolumeSelect(vtkMRMLNode*);
-  void onTrackerSelect(vtkMRMLNode*);
-  void toggleRecord();
-  void setMinHessian(int);
-  void showNextImage();
-  void matchWithNextImage();
+  void onMinHessianChanged(int);
+
   void onBogusPathChanged(const QString&);
+  void onTrainPathChanged(const QString&);
+  void onQueryPathChanged(const QString&);
+  void onTrainStartFrameChanged(int);
+  void onTrainStopFrameChanged(int);
+  void onBogusStartFrameChanged(int);
+  void onBogusStopFrameChanged(int);
+  void onQueryStartFrameChanged(int);
+  void onQueryStopFrameChanged(int);
+  void onComputeBogus();
+  void onComputeTrain();
+  void onComputeQuery();
 
 protected:
   QScopedPointer<qSlicerSurfFeaturesModuleWidgetPrivate> d_ptr;
