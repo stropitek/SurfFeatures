@@ -42,8 +42,10 @@
 
 // Qt includes
 #include <QTextEdit>
-
 #include "vtkSlicerSurfFeaturesModuleLogicExport.h"
+
+using namespace std;
+using namespace cv;
 
 
 /// \ingroup Slicer_QtModules_ExtensionTemplate
@@ -62,11 +64,11 @@ public:
   void removeObservedVolume();
   void removeObservedTransform();
   void toggleRecord();
-  void match();
   void setConsole(QTextEdit* console);
   void setMinHessian(int);
   void showNextImage();
   void matchWithNextImage();
+  void changeBogusFile(std::string);
 
 protected:
   vtkSlicerSurfFeaturesLogic();
@@ -86,36 +88,56 @@ private:
   void operator=(const vtkSlicerSurfFeaturesLogic&);               // Not implemented
 
   void recordData(vtkMRMLNode* node);
-  void matchImageToDatabase(vtkMRMLNode* node);
   void stopWatchWrite(std::ostringstream& oss);
   void resetConsoleFont();
   vtkImageData* cropData(vtkImageData* data);
-  cv::Mat convertImage(vtkImageData* data, void* void_ptr);                                                  
+  cv::Mat convertImage(vtkImageData* data);                                                  
   void showImage(vtkMRMLNode* node);
   void showMatchWithImage(vtkMRMLNode* node);
   void computeKeypointsAndDescriptors(const cv::Mat& data, std::vector<cv::KeyPoint>& keypoints, cv::Mat& descriptors);
   bool isTracked(vtkMRMLNode* node);
+  void initBogusDatabase();
+  void findClosestSlice(vtkMRMLNode* queryNode);
+  void updateDescriptorMatcher();
 
   // Attributes
 private:
+  // Nodes
   vtkMRMLScalarVolumeNode* observedVolume;
   vtkMRMLLinearTransformNode* observedTransform;
+
+  // Clock
   clock_t lastImageModified;
   clock_t initSurf;
   clock_t initTime;
   clock_t lastStopWatch;
+
+  // Action Flags
   bool recording;
   bool matchNext;
   bool showNextImg;
   bool matchWithNextImg;
-  cv::FlannBasedMatcher flannMatcher;
+
+  // opencv keypoints, descriptors and matchers
   std::vector<cv::Mat> descriptorDatabase;
+  std::vector<cv::Mat> descriptorBogus;
   std::vector<std::vector<cv::KeyPoint> > keypointsDatabase;
+  std::vector<std::vector<cv::KeyPoint> > keypointsBogus;
+  cv::Ptr<cv::DescriptorMatcher> descriptorMatcher;
+  cv::Ptr<cv::DescriptorMatcher> descriptorMatcherBogus;
+
+  // Buffer
   cv::Mat lastDescriptor;
   cv::Mat lastImage;
   std::vector<cv::KeyPoint> lastKeypoints;
+
+  // Console
   QTextEdit* console;
+
+  // Parameters
   int minHessian;
+  std::string matcherType;
+  std::string bogusFile;
 };
 
 

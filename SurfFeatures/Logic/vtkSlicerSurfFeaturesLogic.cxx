@@ -50,484 +50,8 @@
 #include <opencv2/imgproc/imgproc_c.h>
 #include "opencv2/nonfree/gpu.hpp"
 
-// TODO: make functions called often inline
-
-//----------------------------------------------------------------------------
-vtkStandardNewMacro(vtkSlicerSurfFeaturesLogic);
-
-//----------------------------------------------------------------------------
-vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
-{
-  this->observedVolume = NULL;
-  this->observedTransform = NULL;
-  this->lastImageModified = clock();
-  this->lastStopWatch = clock();
-  this->initTime = clock();
-  this->recording = false;
-  this->matchNext = false;
-  this->showNextImg = false;
-  this->matchWithNextImg = false;
-  this->minHessian = 200;
-}
-
-//----------------------------------------------------------------------------
-vtkSlicerSurfFeaturesLogic::~vtkSlicerSurfFeaturesLogic()
-{
-}
-
-//----------------------------------------------------------------------------
-void vtkSlicerSurfFeaturesLogic::PrintSelf(ostream& os, vtkIndent indent)
-{
-  this->Superclass::PrintSelf(os, indent);
-}
-
-//---------------------------------------------------------------------------
-void vtkSlicerSurfFeaturesLogic::SetMRMLSceneInternal(vtkMRMLScene * newScene)
-{
-  vtkNew<vtkIntArray> events;
-  events->InsertNextValue(vtkMRMLScene::NodeAddedEvent);
-  events->InsertNextValue(vtkMRMLScene::NodeRemovedEvent);
-  events->InsertNextValue(vtkMRMLScene::EndBatchProcessEvent);
-  this->SetAndObserveMRMLSceneEventsInternal(newScene, events.GetPointer());
-}
-
-//-----------------------------------------------------------------------------
-void vtkSlicerSurfFeaturesLogic::RegisterNodes()
-{
-  assert(this->GetMRMLScene() != 0);
-}
-
-//---------------------------------------------------------------------------
-void vtkSlicerSurfFeaturesLogic::UpdateFromMRMLScene()
-{
-  assert(this->GetMRMLScene() != 0);
-}
-
-//---------------------------------------------------------------------------
-void vtkSlicerSurfFeaturesLogic
-::OnMRMLSceneNodeAdded(vtkMRMLNode* vtkNotUsed(node))
-{
-}
-
-//---------------------------------------------------------------------------
-void vtkSlicerSurfFeaturesLogic
-::OnMRMLSceneNodeRemoved(vtkMRMLNode* vtkNotUsed(node))
-{
-}
-
-void vtkSlicerSurfFeaturesLogic::displayFeatures(vtkMRMLNode* node)
-{
-  // Only if recording
-  if(!this->recording && !this->matchNext && !this->showNextImg && !this->matchWithNextImg)
-    return;
-  // Verify validity of node
-  if(!node)
-    return;
-  // Verify we have scalar volume node
-  if(strcmp(node->GetClassName(),"vtkMRMLScalarVolumeNode"))
-    return;
-
-  // Verify that the node is tracked
-  if(!this->isTracked(node))
-  {
-    std::ostringstream oss;
-    oss << "Ignoring untracked node" << std::endl;
-    this->console->insertPlainText(oss.str().c_str());
-    return;
-  }
-
-  if(this->matchNext)
-    this->recording = false;
-
-  if(this->recording)
-    this->recordData(node);
-  else if(this->matchNext)
-  {
-    this->matchImageToDatabase(node);
-    this->matchNext = false;
-  }
-  if(this->showNextImg)
-    this->showImage(node);
-  if(this->matchWithNextImg)
-    this->showMatchWithImage(node);
-
-}
-
-vtkImageData* vtkSlicerSurfFeaturesLogic::cropData(vtkImageData* data)
-{
-  int dims[3];
-  data->GetDimensions(dims);
-  vtkSmartPointer<vtkExtractVOI> extractVOI = vtkExtractVOI::New();
-  extractVOI->SetInput(data);
-  extractVOI->SetVOI(dims[0]/5.,3.*dims[0]/3.9,dims[1]/6,3.*dims[1]/4, 0, 0);
-  extractVOI->SetSampleRate(1,1,1);
-  extractVOI->Update();
-  return extractVOI->GetOutput();
-}
-
-cv::Mat vtkSlicerSurfFeaturesLogic::convertImage(vtkImageData* data, void* void_ptr)
-{
-  vtkSmartPointer<vtkImageExport> exporter = vtkSmartPointer<vtkImageExport>::New();
-  exporter->SetInput(data);
-  int dims[3];
-  data->GetDimensions(dims);
-  int numel = dims[0]*dims[1]*dims[2];
-  void_ptr = malloc(numel);
-  exporter->SetExportVoidPointer(void_ptr);
-  exporter->Export();
-
-  cv::Mat ocvImage(dims[1],dims[0],CV_8U ,void_ptr);
-  return ocvImage;
-}
-
-void vtkSlicerSurfFeaturesLogic::recordData(vtkMRMLNode* node)
-{
-  // Verify image data
-  vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(node);
-  vtkImageData* data = sv_node->GetImageData();
-  if(!data)
-    return;
-
-  // Crop, then convert to opencv matrix
-  void* void_ptr = NULL;
-  vtkImageData* croppedData = this->cropData(data);
-  cv::Mat ocvData = this->convertImage(croppedData,void_ptr);
-
-  
-
-  // GPU implementation
-  //cv::gpu::GpuMat keypointsGPU;
-  //cv::gpu::GpuMat descriptorsGPU;
-  //cv::gpu::SURF_GPU surf;
-  //cv::gpu::GpuMat gpuMat(mat);
-  //surf(gpuMat, cv::gpu::GpuMat(), keypointsGPU, descriptorsGPU);
-
-  // Detect keypoints (time consuming part)
-  cv::SurfFeatureDetector detector(this->minHessian);
-  std::vector<cv::KeyPoint> keypoints;
-  detector.detect(ocvData,keypoints);
-  //for(int i = 0; i<keypoints.size(); i++){
-  //  cv::Point2f p = keypoints[i].pt;
-  //  int loc[3] = { (int)p.x, (int)(p.y), 1};
-  //  double point[3];
-  //  vtkIdType id = croppedData->ComputePointId(loc);
-  //  croppedData->GetPoint(id,point);
-  //  std::ostringstream oss;
-  //  oss << "Keypoint (" << loc[0] << "," << loc[1] << "," << loc[2] << ") ";
-  //  oss << "--> data (" << point[0] << "," << point[1] << "," << point[2] << ") " << this->stopWatchWrite() << "<br>";
-  //  this->console->insertPlainText(oss.str().c_str());
-  //}
-
-  // Get keypoints' surf descriptors
-  cv::SurfDescriptorExtractor extractor;
-  cv::Mat descriptors;
-  extractor.compute(ocvData, keypoints, descriptors);
-  this->descriptorDatabase.push_back(descriptors);
-  this->keypointsDatabase.push_back(keypoints);
-
-  free(void_ptr);
-}
-
-void vtkSlicerSurfFeaturesLogic::matchImageToDatabase(vtkMRMLNode* node)
-{
-  // Verify image data
-  vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(node);
-  vtkImageData* data = sv_node->GetImageData();
-  if(!data)
-    return;
-
-  // Crop, then convert to opencv matrix
-  void* void_ptr = NULL;
-  vtkImageData* croppedData = this->cropData(data);
-  cv::Mat ocvData = this->convertImage(croppedData, void_ptr);
-
-  // Compute keypoints and descriptors
-  std::vector<cv::KeyPoint> keypoints;
-  cv::Mat descriptors;
-  this->computeKeypointsAndDescriptors(ocvData, keypoints, descriptors);
-
-  // Add train data if does not already exist
-  if(this->flannMatcher.empty())
-    this->flannMatcher.add(this->descriptorDatabase);
-  std::vector<std::vector<cv::DMatch> > matches;
-  this->flannMatcher.knnMatch(descriptors,matches,3);
-
-  free(void_ptr);
-}
-
-void vtkSlicerSurfFeaturesLogic
-::ProcessMRMLNodesEvents( vtkObject* caller, unsigned long event, void * callData )
-{
-  if ( caller == NULL )
-    {
-    return;
-    }
-  
-  if(event == vtkMRMLVolumeNode::ImageDataModifiedEvent)
-  {
-    if(this->recording){
-      std::ostringstream oss;
-      oss << "New ImageDataModifiedEvent";
-      this->stopWatchWrite(oss);
-      this->console->insertPlainText(oss.str().c_str());
-    }
-    clock_t now = clock();
-    clock_t clockTicksTaken = now - this->lastImageModified;
-    this->lastImageModified = now;
-    double timeInSeconds = clockTicksTaken / (double) CLOCKS_PER_SEC;
-    vtkMRMLScalarVolumeNode* scalarNode = vtkMRMLScalarVolumeNode::SafeDownCast( caller );
-    this->displayFeatures(scalarNode);
-    
-  }
-  else if(event == vtkMRMLLinearTransformNode::TransformModifiedEvent)
-  {
-    if(this->recording){
-      std::ostringstream oss;
-      oss << "New TransformModifiedEvent ";
-      this->stopWatchWrite(oss);
-      this->console->insertPlainText(oss.str().c_str());
-    }
-  }
-  else
-    this->Superclass::ProcessMRMLNodesEvents( caller, event, callData );
-}
-
-void vtkSlicerSurfFeaturesLogic::setObservedNode(vtkMRMLScalarVolumeNode *snode)
-{
-  if(snode==this->observedVolume)
-    return;
-  if(!snode){
-    this->removeObservedVolume();
-    return;
-  }
-
-  int wasModifying = this->StartModify();
-  if(this->observedVolume)
-    vtkSetAndObserveMRMLNodeMacro( this->observedVolume, 0 );
-
-  vtkMRMLScalarVolumeNode* newNode = NULL;
-  vtkSmartPointer< vtkIntArray > events = vtkSmartPointer< vtkIntArray >::New();
-  //events->InsertNextValue( vtkCommand::ModifiedEvent );
-  events->InsertNextValue( vtkMRMLVolumeNode::ImageDataModifiedEvent );
-  vtkSetAndObserveMRMLNodeEventsMacro( newNode, snode, events );
-  this->observedVolume = newNode;
-  
-  this->EndModify( wasModifying );
-}
-
-void vtkSlicerSurfFeaturesLogic::setObservedNode(vtkMRMLLinearTransformNode *tnode)
-{
-  if(tnode==this->observedTransform)
-    return;
-  if(!tnode){
-    this->removeObservedTransform();
-    return;
-  }
-
-  int wasModifying = this->StartModify();
-  if(this->observedTransform)
-    vtkSetAndObserveMRMLNodeMacro(this->observedTransform, 0);
-
-  vtkMRMLLinearTransformNode* newNode = NULL;
-  vtkSmartPointer< vtkIntArray > events = vtkSmartPointer< vtkIntArray >::New();
-  events->InsertNextValue(vtkMRMLTransformableNode::TransformModifiedEvent);
-  vtkSetAndObserveMRMLNodeEventsMacro(newNode,tnode,events);
-  this->observedTransform = newNode;
-
-  this->EndModify(wasModifying);
-}
-
-void vtkSlicerSurfFeaturesLogic::removeObservedVolume()
-{
-  if(this->observedVolume)
-    vtkSetAndObserveMRMLNodeMacro( this->observedVolume, 0 );
-  this->observedVolume = NULL;
-}
-
-void vtkSlicerSurfFeaturesLogic::removeObservedTransform()
-{
-  if(this->observedTransform)
-    vtkSetAndObserveMRMLNodeMacro( this->observedTransform, 0 );
-  this->observedTransform = NULL;
-}
-
-void vtkSlicerSurfFeaturesLogic::toggleRecord()
-{
-  this->resetConsoleFont();
-  this->recording = !this->recording;
-  std::ostringstream oss;
-  oss << "Toggling recording to " << this->recording;
-  this->stopWatchWrite(oss);
-  this->console->insertPlainText(oss.str().c_str());
-}
-
-void vtkSlicerSurfFeaturesLogic::match()
-{
-  this->matchNext = true;
-}
-
-void vtkSlicerSurfFeaturesLogic::setConsole(QTextEdit* console)
-{
-  this->console = console;
-  this->resetConsoleFont();
-}
-
-void vtkSlicerSurfFeaturesLogic::setMinHessian(int minHessian)
-{
-  this->minHessian = minHessian;
-}
-
-void vtkSlicerSurfFeaturesLogic::showNextImage()
-{
-  this->showNextImg = true;
-}
-
-void vtkSlicerSurfFeaturesLogic::matchWithNextImage()
-{
-  this->matchWithNextImg = true;
-}
-
-void vtkSlicerSurfFeaturesLogic::stopWatchWrite(std::ostringstream& oss)
-{
-  clock_t endTime = clock();
-  double timeInSeconds = (endTime - this->initTime) / (double) CLOCKS_PER_SEC;
-  double intervalInMiliSeconds = (endTime - this->lastStopWatch)/(double) CLOCKS_PER_SEC * 1000;
-  std::string output = oss.str();
-  int iSpaces = 50 - output.size();
-  std::string spaces("");
-  if(iSpaces > 0)
-  {
-    spaces = std::string(iSpaces,' ');
-  }
-  oss << spaces << "-- " << timeInSeconds  << " s -- + " << intervalInMiliSeconds << " ms --" << std::endl;
-  this->lastStopWatch = endTime;
-}
-
-void vtkSlicerSurfFeaturesLogic::resetConsoleFont()
-{
-  QFont font("Courier",8);
-  font.setStretch(QFont::UltraCondensed);
-  this->console->setCurrentFont(font);
-}
-
-void vtkSlicerSurfFeaturesLogic::showImage(vtkMRMLNode *node)
-{
-  this->showNextImg = false;
-  // Get Image Data
-  vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(node);
-  vtkImageData* data = sv_node->GetImageData();
-  if(!data)
-    return;
-
-  // Crop, then convert to opencv matrix
-  void* void_ptr = NULL;
-  vtkImageData* cdata = this->cropData(data);
-  cv::Mat ocvImg = this->convertImage(cdata, void_ptr);
-
-  // Compute keypoints and descriptors
-  std::vector<cv::KeyPoint> keypoints;
-  cv::Mat descriptors;
-  this->computeKeypointsAndDescriptors(ocvImg, keypoints, descriptors);
-
-  cv::Mat img_keypoints;
-  cv::drawKeypoints( ocvImg, keypoints, img_keypoints, cv::Scalar::all(-1), cv::DrawMatchesFlags::DEFAULT );
-  cv::imshow("Keypoints 1", img_keypoints );
-  cv::waitKey(0);
-  free(void_ptr);
-}
-
-void vtkSlicerSurfFeaturesLogic::showMatchWithImage(vtkMRMLNode* node)
-{
-  // Get Image Data
-  vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(node);
-  vtkImageData* data = sv_node->GetImageData();
-  if(!data)
-    return;
-
-  // Crop, then convert to opencv matrix
-  void* void_ptr = NULL;
-  vtkImageData* cdata = this->cropData(data);
-  cv::Mat ocvImg = this->convertImage(cdata, void_ptr);
-
-  // Compute keypoints and descriptors
-  std::vector<cv::KeyPoint> keypoints;
-  cv::Mat descriptors;
-  this->computeKeypointsAndDescriptors(ocvImg, keypoints, descriptors);
-
-  if(this->lastDescriptor.empty()){
-    this->lastDescriptor = descriptors;
-    this->lastKeypoints = keypoints;
-    this->lastImage = ocvImg.clone();
-  }
-  else {
-    cv::FlannBasedMatcher matcher;
-    std::vector< cv::DMatch > matches;
-    matcher.match( this->lastDescriptor, descriptors, matches );
-
-    double max_dist = 0; double min_dist = 100;
-
-    //-- Quick calculation of max and min distances between keypoints
-    for( int i = 0; i < this->lastDescriptor.rows; i++ )
-    { double dist = matches[i].distance;
-      if( dist < min_dist ) min_dist = dist;
-      if( dist > max_dist ) max_dist = dist;
-    }
-    std::ostringstream oss;
-    oss << "-- Max dist : " << max_dist << std::endl;
-    oss << "-- Min dist : " << min_dist << std::endl;
-    this->console->insertPlainText(oss.str().c_str());
-
-    //-- Draw only "good" matches (i.e. whose distance is less than 2*min_dist )
-    //-- PS.- radiusMatch can also be used here.
-    std::vector< cv::DMatch > good_matches;
-
-    for( int i = 0; i < this->lastDescriptor.rows; i++ )
-    { 
-      if( matches[i].distance < 0.8*max_dist && matches[i].distance > 2*min_dist ) {
-        good_matches.push_back( matches[i]);
-      }
-    }
-
-  //-- Draw only "good" matches
-  cv::Mat img_matches;
-  cv::drawMatches( this->lastImage, this->lastKeypoints, ocvImg, keypoints,
-    good_matches, img_matches, cv::Scalar::all(-1), cv::Scalar::all(-1),
-    std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
-
-  //-- Show detected matches
-  imshow( "Good Matches", img_matches );
-
-  //for( int i = 0; i < good_matches.size(); i++ )
-  //{ printf( "-- Good Match [%d] Keypoint 1: %d  -- Keypoint 2: %d  \n", i, good_matches[i].queryIdx, good_matches[i].trainIdx ); }
-
-  cv::waitKey(0);
-
-    this->matchWithNextImg = false;
-  }
-}
-
-void vtkSlicerSurfFeaturesLogic::computeKeypointsAndDescriptors(const cv::Mat& data, std::vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors)
-{
-  // Get the descriptor of the current image
-  cv::SurfFeatureDetector detector(this->minHessian);
-  detector.detect(data,keypoints);
-
-  // Get keypoints' surf descriptors
-  cv::SurfDescriptorExtractor extractor;
-  extractor.compute(data, keypoints, descriptors);
-}
-
-bool vtkSlicerSurfFeaturesLogic::isTracked(vtkMRMLNode* node)
-{
-  vtkMRMLVolumeNode* vnode = vtkMRMLVolumeNode::SafeDownCast(node);
-  if(!vnode)
-    return false;
-  double* origin = vnode->GetSpacing();
-  if(origin[0]==1.0 && origin[1]==1.0 && origin[2]==1.0)
-    return false;
-  return true;
-}
-
+using namespace std;
+using namespace cv;
 
 // Matt functions ==================================================================
 
@@ -656,8 +180,6 @@ public:
 	float m_Key_fScale;	
 };
 
-using namespace cv;
-using namespace std;
 
 
 #define PI 3.1415926535897
@@ -2766,6 +2288,7 @@ main_runMatching(
 
 		int iMaxIndex = -1;
 		int iMaxCount = -1;
+    // Convolution with [1 1 1] ==> Smoothing
 		for( int j = 0; j < vecImgMatches.size(); j++ )
 		{
 			int iCount = vecImgMatches[j];
@@ -2781,8 +2304,9 @@ main_runMatching(
 
 		for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
 		{
-			vecImgMatches[j] = 0;
+			vecImgMatches[j] = 0; // This vector will now be used as flag
 		}
+    // Flag all images and immediate neighborhood when count is above 2
 		for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
 		{
 			if( vecImgMatchesSmooth[j] >= 2 )
@@ -2797,9 +2321,11 @@ main_runMatching(
 		// Save all matches
 		vector< DMatch > vmMatchesSmooth;
 		vmMatchesSmooth.clear();
+    // This loop reorders matches according to train image index and discards unflagged ones.
 		for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
 		{
-			if( vecImgMatches[j] > 0 )
+      // if not flagged don't add the match
+			if( vecImgMatches[j] > 0 ) // if flagged
 			{
 				for( int k = 0; k < vmMatches.size(); k++ )
 				{
@@ -2985,3 +2511,622 @@ main_runMatching(
 // SURF SURF C:\downloads\data\tamas\neuro-case\anonymized\ultrasound\TrackedImageSequence_20121211_095535.mha C:\downloads\data\tamas\2013-01-03_KidneyPhantomAndHumanUS\MaskFemale.png
 // 
 // 
+
+// TODO: make functions called often inline
+
+//----------------------------------------------------------------------------
+vtkStandardNewMacro(vtkSlicerSurfFeaturesLogic);
+
+//----------------------------------------------------------------------------
+vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
+{
+  this->observedVolume = NULL;
+  this->observedTransform = NULL;
+  this->lastImageModified = clock();
+  this->lastStopWatch = clock();
+  this->initTime = clock();
+  this->recording = false;
+  this->matchNext = false;
+  this->showNextImg = false;
+  this->matchWithNextImg = false;
+  this->minHessian = 200;
+  this->matcherType = "FlannBased";
+  this->descriptorMatcher = DescriptorMatcher::create(matcherType);
+  this->descriptorMatcherBogus = DescriptorMatcher::create(matcherType);
+  // Remove those lines when clean
+  this->bogusFile = "C:\\Users\\DanK\\MProject\\data\\amigo\\TrackedImageSequence_20121210_151243.mha";
+  this->initBogusDatabase();
+}
+
+//----------------------------------------------------------------------------
+vtkSlicerSurfFeaturesLogic::~vtkSlicerSurfFeaturesLogic()
+{
+}
+
+//----------------------------------------------------------------------------
+void vtkSlicerSurfFeaturesLogic::PrintSelf(ostream& os, vtkIndent indent)
+{
+  this->Superclass::PrintSelf(os, indent);
+}
+
+//---------------------------------------------------------------------------
+void vtkSlicerSurfFeaturesLogic::SetMRMLSceneInternal(vtkMRMLScene * newScene)
+{
+  vtkNew<vtkIntArray> events;
+  events->InsertNextValue(vtkMRMLScene::NodeAddedEvent);
+  events->InsertNextValue(vtkMRMLScene::NodeRemovedEvent);
+  events->InsertNextValue(vtkMRMLScene::EndBatchProcessEvent);
+  this->SetAndObserveMRMLSceneEventsInternal(newScene, events.GetPointer());
+}
+
+//-----------------------------------------------------------------------------
+void vtkSlicerSurfFeaturesLogic::RegisterNodes()
+{
+  assert(this->GetMRMLScene() != 0);
+}
+
+//---------------------------------------------------------------------------
+void vtkSlicerSurfFeaturesLogic::UpdateFromMRMLScene()
+{
+  assert(this->GetMRMLScene() != 0);
+}
+
+//---------------------------------------------------------------------------
+void vtkSlicerSurfFeaturesLogic
+::OnMRMLSceneNodeAdded(vtkMRMLNode* vtkNotUsed(node))
+{
+}
+
+//---------------------------------------------------------------------------
+void vtkSlicerSurfFeaturesLogic
+::OnMRMLSceneNodeRemoved(vtkMRMLNode* vtkNotUsed(node))
+{
+}
+
+void vtkSlicerSurfFeaturesLogic::displayFeatures(vtkMRMLNode* node)
+{
+  // Only if recording
+  if(!this->recording && !this->matchNext && !this->showNextImg && !this->matchWithNextImg)
+    return;
+  // Verify validity of node
+  if(!node)
+    return;
+  // Verify we have scalar volume node
+  if(strcmp(node->GetClassName(),"vtkMRMLScalarVolumeNode"))
+    return;
+
+  // Verify that the node is tracked
+  if(!this->isTracked(node))
+  {
+    std::ostringstream oss;
+    oss << "Ignoring untracked node" << std::endl;
+    this->console->insertPlainText(oss.str().c_str());
+    return;
+  }
+
+  if(this->recording)
+    this->recordData(node);
+  if(this->showNextImg)
+    this->showImage(node);
+  if(this->matchWithNextImg)
+    this->findClosestSlice(node);
+    //this->showMatchWithImage(node);
+
+}
+
+vtkImageData* vtkSlicerSurfFeaturesLogic::cropData(vtkImageData* data)
+{
+  int dims[3];
+  data->GetDimensions(dims);
+  vtkSmartPointer<vtkExtractVOI> extractVOI = vtkExtractVOI::New();
+  extractVOI->SetInput(data);
+  extractVOI->SetVOI(dims[0]/5.,3.*dims[0]/3.9,dims[1]/6,3.*dims[1]/4, 0, 0);
+  extractVOI->SetSampleRate(1,1,1);
+  extractVOI->Update();
+  return extractVOI->GetOutput();
+}
+
+cv::Mat vtkSlicerSurfFeaturesLogic::convertImage(vtkImageData* data)
+{
+  vtkSmartPointer<vtkImageExport> exporter = vtkSmartPointer<vtkImageExport>::New();
+  exporter->SetInput(data);
+  int dims[3];
+  data->GetDimensions(dims);
+  int numel = dims[0]*dims[1]*dims[2];
+  void* void_ptr = malloc(numel);
+  exporter->SetExportVoidPointer(void_ptr);
+  exporter->Export();
+
+  cv::Mat ocvImage(dims[1],dims[0],CV_8U ,void_ptr);
+  cv::Mat imgCopy = ocvImage.clone();
+  return imgCopy;
+}
+
+void vtkSlicerSurfFeaturesLogic::recordData(vtkMRMLNode* node)
+{
+  // Verify image data
+  vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(node);
+  vtkImageData* data = sv_node->GetImageData();
+  if(!data)
+    return;
+
+  // Crop, then convert to opencv matrix
+  vtkImageData* croppedData = this->cropData(data);
+  cv::Mat ocvData = this->convertImage(croppedData);
+
+  
+
+  // GPU implementation
+  //cv::gpu::GpuMat keypointsGPU;
+  //cv::gpu::GpuMat descriptorsGPU;
+  //cv::gpu::SURF_GPU surf;
+  //cv::gpu::GpuMat gpuMat(mat);
+  //surf(gpuMat, cv::gpu::GpuMat(), keypointsGPU, descriptorsGPU);
+
+  // Detect keypoints (time consuming part)
+  cv::SurfFeatureDetector detector(this->minHessian);
+  std::vector<cv::KeyPoint> keypoints;
+  detector.detect(ocvData,keypoints);
+  //for(int i = 0; i<keypoints.size(); i++){
+  //  cv::Point2f p = keypoints[i].pt;
+  //  int loc[3] = { (int)p.x, (int)(p.y), 1};
+  //  double point[3];
+  //  vtkIdType id = croppedData->ComputePointId(loc);
+  //  croppedData->GetPoint(id,point);
+  //  std::ostringstream oss;
+  //  oss << "Keypoint (" << loc[0] << "," << loc[1] << "," << loc[2] << ") ";
+  //  oss << "--> data (" << point[0] << "," << point[1] << "," << point[2] << ") " << this->stopWatchWrite() << "<br>";
+  //  this->console->insertPlainText(oss.str().c_str());
+  //}
+
+  // Get keypoints' surf descriptors
+  cv::SurfDescriptorExtractor extractor;
+  cv::Mat descriptors;
+  extractor.compute(ocvData, keypoints, descriptors);
+  this->descriptorDatabase.push_back(descriptors);
+  this->keypointsDatabase.push_back(keypoints);
+}
+
+
+void vtkSlicerSurfFeaturesLogic
+::ProcessMRMLNodesEvents( vtkObject* caller, unsigned long event, void * callData )
+{
+  if ( caller == NULL )
+    {
+    return;
+    }
+  
+  if(event == vtkMRMLVolumeNode::ImageDataModifiedEvent)
+  {
+    if(this->recording){
+      std::ostringstream oss;
+      oss << "New ImageDataModifiedEvent";
+      this->stopWatchWrite(oss);
+      this->console->insertPlainText(oss.str().c_str());
+    }
+    clock_t now = clock();
+    clock_t clockTicksTaken = now - this->lastImageModified;
+    this->lastImageModified = now;
+    double timeInSeconds = clockTicksTaken / (double) CLOCKS_PER_SEC;
+    vtkMRMLScalarVolumeNode* scalarNode = vtkMRMLScalarVolumeNode::SafeDownCast( caller );
+    this->displayFeatures(scalarNode);
+    
+  }
+  else if(event == vtkMRMLLinearTransformNode::TransformModifiedEvent)
+  {
+    if(this->recording){
+      std::ostringstream oss;
+      oss << "New TransformModifiedEvent ";
+      this->stopWatchWrite(oss);
+      this->console->insertPlainText(oss.str().c_str());
+    }
+  }
+  else
+    this->Superclass::ProcessMRMLNodesEvents( caller, event, callData );
+}
+
+void vtkSlicerSurfFeaturesLogic::setObservedNode(vtkMRMLScalarVolumeNode *snode)
+{
+  if(snode==this->observedVolume)
+    return;
+  if(!snode){
+    this->removeObservedVolume();
+    return;
+  }
+
+  int wasModifying = this->StartModify();
+  if(this->observedVolume)
+    vtkSetAndObserveMRMLNodeMacro( this->observedVolume, 0 );
+
+  vtkMRMLScalarVolumeNode* newNode = NULL;
+  vtkSmartPointer< vtkIntArray > events = vtkSmartPointer< vtkIntArray >::New();
+  //events->InsertNextValue( vtkCommand::ModifiedEvent );
+  events->InsertNextValue( vtkMRMLVolumeNode::ImageDataModifiedEvent );
+  vtkSetAndObserveMRMLNodeEventsMacro( newNode, snode, events );
+  this->observedVolume = newNode;
+  
+  this->EndModify( wasModifying );
+}
+
+void vtkSlicerSurfFeaturesLogic::setObservedNode(vtkMRMLLinearTransformNode *tnode)
+{
+  if(tnode==this->observedTransform)
+    return;
+  if(!tnode){
+    this->removeObservedTransform();
+    return;
+  }
+
+  int wasModifying = this->StartModify();
+  if(this->observedTransform)
+    vtkSetAndObserveMRMLNodeMacro(this->observedTransform, 0);
+
+  vtkMRMLLinearTransformNode* newNode = NULL;
+  vtkSmartPointer< vtkIntArray > events = vtkSmartPointer< vtkIntArray >::New();
+  events->InsertNextValue(vtkMRMLTransformableNode::TransformModifiedEvent);
+  vtkSetAndObserveMRMLNodeEventsMacro(newNode,tnode,events);
+  this->observedTransform = newNode;
+
+  this->EndModify(wasModifying);
+}
+
+void vtkSlicerSurfFeaturesLogic::removeObservedVolume()
+{
+  if(this->observedVolume)
+    vtkSetAndObserveMRMLNodeMacro( this->observedVolume, 0 );
+  this->observedVolume = NULL;
+}
+
+void vtkSlicerSurfFeaturesLogic::removeObservedTransform()
+{
+  if(this->observedTransform)
+    vtkSetAndObserveMRMLNodeMacro( this->observedTransform, 0 );
+  this->observedTransform = NULL;
+}
+
+void vtkSlicerSurfFeaturesLogic::toggleRecord()
+{
+  this->resetConsoleFont();
+  this->recording = !this->recording;
+  std::ostringstream oss;
+  oss << "Toggling recording to " << this->recording;
+  this->stopWatchWrite(oss);
+  this->console->insertPlainText(oss.str().c_str());
+}
+
+
+void vtkSlicerSurfFeaturesLogic::setConsole(QTextEdit* console)
+{
+  this->console = console;
+  this->resetConsoleFont();
+}
+
+void vtkSlicerSurfFeaturesLogic::setMinHessian(int minHessian)
+{
+  if(minHessian != this->minHessian){
+    this->minHessian = minHessian;
+    this->initBogusDatabase();
+  }
+}
+
+void vtkSlicerSurfFeaturesLogic::showNextImage()
+{
+  this->showNextImg = true;
+}
+
+void vtkSlicerSurfFeaturesLogic::matchWithNextImage()
+{
+  this->matchWithNextImg = true;
+}
+
+void vtkSlicerSurfFeaturesLogic::stopWatchWrite(std::ostringstream& oss)
+{
+  clock_t endTime = clock();
+  double timeInSeconds = (endTime - this->initTime) / (double) CLOCKS_PER_SEC;
+  double intervalInMiliSeconds = (endTime - this->lastStopWatch)/(double) CLOCKS_PER_SEC * 1000;
+  std::string output = oss.str();
+  int iSpaces = 50 - output.size();
+  std::string spaces("");
+  if(iSpaces > 0)
+  {
+    spaces = std::string(iSpaces,' ');
+  }
+  oss << spaces << "-- " << timeInSeconds  << " s -- + " << intervalInMiliSeconds << " ms --" << std::endl;
+  this->lastStopWatch = endTime;
+}
+
+void vtkSlicerSurfFeaturesLogic::resetConsoleFont()
+{
+  QFont font("Courier",8);
+  font.setStretch(QFont::UltraCondensed);
+  this->console->setCurrentFont(font);
+}
+
+void vtkSlicerSurfFeaturesLogic::showImage(vtkMRMLNode *node)
+{
+  this->showNextImg = false;
+  // Get Image Data
+  vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(node);
+  vtkImageData* data = sv_node->GetImageData();
+  if(!data)
+    return;
+
+  // Crop, then convert to opencv matrix
+  vtkImageData* cdata = this->cropData(data);
+  cv::Mat ocvImg = this->convertImage(cdata);
+
+  // Compute keypoints and descriptors
+  std::vector<cv::KeyPoint> keypoints;
+  cv::Mat descriptors;
+  this->computeKeypointsAndDescriptors(ocvImg, keypoints, descriptors);
+
+  cv::Mat img_keypoints;
+  cv::drawKeypoints( ocvImg, keypoints, img_keypoints, cv::Scalar::all(-1), cv::DrawMatchesFlags::DEFAULT );
+  cv::imshow("Keypoints 1", img_keypoints );
+  cv::waitKey(0);
+}
+
+void vtkSlicerSurfFeaturesLogic::showMatchWithImage(vtkMRMLNode* node)
+{
+  // Get Image Data
+  vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(node);
+  vtkImageData* data = sv_node->GetImageData();
+  if(!data)
+    return;
+
+  // Crop, then convert to opencv matrix
+  vtkImageData* cdata = this->cropData(data);
+  cv::Mat ocvImg = this->convertImage(cdata);
+
+  // Compute keypoints and descriptors
+  std::vector<cv::KeyPoint> keypoints;
+  cv::Mat descriptors;
+  this->computeKeypointsAndDescriptors(ocvImg, keypoints, descriptors);
+
+  if(this->lastDescriptor.empty()){
+    this->lastDescriptor = descriptors;
+    this->lastKeypoints = keypoints;
+    this->lastImage = ocvImg.clone();
+  }
+  else {
+    cv::Ptr<cv::DescriptorMatcher> matcher = cv::DescriptorMatcher::create(this->matcherType);
+    std::vector< cv::DMatch > matches;
+    matcher->match( this->lastDescriptor, descriptors, matches );
+
+    double max_dist = 0; double min_dist = 100;
+
+    //-- Quick calculation of max and min distances between keypoints
+    for( int i = 0; i < this->lastDescriptor.rows; i++ )
+    { double dist = matches[i].distance;
+      if( dist < min_dist ) min_dist = dist;
+      if( dist > max_dist ) max_dist = dist;
+    }
+    std::ostringstream oss;
+    oss << "-- Max dist : " << max_dist << std::endl;
+    oss << "-- Min dist : " << min_dist << std::endl;
+    this->console->insertPlainText(oss.str().c_str());
+
+    //-- Draw only "good" matches (i.e. whose distance is less than 2*min_dist )
+    //-- PS.- radiusMatch can also be used here.
+    std::vector< cv::DMatch > good_matches;
+
+    for( int i = 0; i < this->lastDescriptor.rows; i++ )
+    { 
+      if( matches[i].distance < 0.8*max_dist && matches[i].distance > 2*min_dist ) {
+        good_matches.push_back( matches[i]);
+      }
+    }
+
+  //-- Draw only "good" matches
+  cv::Mat img_matches;
+  cv::drawMatches( this->lastImage, this->lastKeypoints, ocvImg, keypoints,
+    good_matches, img_matches, cv::Scalar::all(-1), cv::Scalar::all(-1),
+    std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
+
+  //-- Show detected matches
+  imshow( "Good Matches", img_matches );
+
+  //for( int i = 0; i < good_matches.size(); i++ )
+  //{ printf( "-- Good Match [%d] Keypoint 1: %d  -- Keypoint 2: %d  \n", i, good_matches[i].queryIdx, good_matches[i].trainIdx ); }
+
+  cv::waitKey(0);
+
+    this->matchWithNextImg = false;
+  }
+}
+
+void vtkSlicerSurfFeaturesLogic::changeBogusFile(std::string file)
+{
+  char* pch = &file[0];
+  if( strstr( pch, ".mha" ) ){
+    this->bogusFile = file;
+    this->initBogusDatabase();
+  }
+}
+
+void vtkSlicerSurfFeaturesLogic::computeKeypointsAndDescriptors(const cv::Mat& data, std::vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors)
+{
+  // Get the descriptor of the current image
+  cv::SurfFeatureDetector detector(this->minHessian);
+  detector.detect(data,keypoints);
+
+  // Get keypoints' surf descriptors
+  cv::SurfDescriptorExtractor extractor;
+  extractor.compute(data, keypoints, descriptors);
+}
+
+bool vtkSlicerSurfFeaturesLogic::isTracked(vtkMRMLNode* node)
+{
+  vtkMRMLVolumeNode* vnode = vtkMRMLVolumeNode::SafeDownCast(node);
+  if(!vnode)
+    return false;
+  double* origin = vnode->GetSpacing();
+  if(origin[0]==1.0 && origin[1]==1.0 && origin[2]==1.0)
+    return false;
+  return true;
+}
+
+void vtkSlicerSurfFeaturesLogic::initBogusDatabase()
+{
+	vector<Mat> bogusImages;
+  vector<string> bogusImagesNames;
+	vector< vector<float> > bogusImagesTransform;
+	vector<vector<KeyPoint> > bogusKeypoints;
+	vector<Mat> bogusDescriptors;
+  char* pch = &(this->bogusFile)[0];
+  // Read images
+  if( strstr( pch, ".mha" ) ){
+		if( !readImageList_mha( this->bogusFile, bogusImages, bogusImagesNames, bogusImagesTransform ) )
+			return;
+  }
+  else
+    return;
+
+  // Compute keypoints and descriptors
+  this->keypointsBogus.clear();
+  this->descriptorBogus.clear();
+  for(int i=0; i<bogusImages.size(); i++)
+  {
+    this->keypointsBogus.push_back(vector<KeyPoint>());
+    this->descriptorBogus.push_back(Mat());
+    this->computeKeypointsAndDescriptors(bogusImages[i], this->keypointsBogus[i], this->descriptorBogus[i]);
+  }
+  this->descriptorMatcherBogus->clear();
+  this->descriptorMatcherBogus->add(this->descriptorBogus);
+}
+
+void vtkSlicerSurfFeaturesLogic::updateDescriptorMatcher()
+{
+  unsigned int numel = this->descriptorMatcher->getTrainDescriptors().size();
+  if(this->descriptorDatabase.size() != numel){
+    this->descriptorMatcher->clear();
+    this->descriptorMatcher->add(this->descriptorDatabase);
+  }
+}
+
+void vtkSlicerSurfFeaturesLogic::findClosestSlice(vtkMRMLNode* queryNode)
+{
+  ostringstream oss;
+  oss << "Find Closest Slice begin" ;
+  this->stopWatchWrite(oss);
+
+  vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(queryNode);
+  vtkImageData* data = sv_node->GetImageData();
+  if(!data)
+    return;
+
+  // Crop, then convert to opencv matrix
+  vtkImageData* cdata = this->cropData(data);
+  cv::Mat queryImage = this->convertImage(cdata);
+
+  vector<KeyPoint> queryKeypoints;
+  Mat queryDescriptors;
+  this->computeKeypointsAndDescriptors(queryImage, queryKeypoints, queryDescriptors);
+
+  oss.clear();
+  oss << "Keypoints and descriptors calculated";
+  this->stopWatchWrite(oss);
+  if( queryKeypoints.size() == 0 )
+		return;
+
+  vector<DMatch> matches;
+  vector<vector<DMatch> > mmatches;
+  vector<vector<DMatch> > mmatchesBogus;
+  vector<int> vecImgMatches;
+  vecImgMatches.resize( this->keypointsDatabase.size() );
+
+  for( int j = 0; j < vecImgMatches.size(); j++ )
+    vecImgMatches[j] = 0;
+
+  this->updateDescriptorMatcher();
+
+  matchDescriptorsKNN( queryDescriptors, mmatches, this->descriptorMatcher, 3 );
+	matchDescriptorsKNN( queryDescriptors, mmatchesBogus, this->descriptorMatcherBogus, 1 );
+
+  vector< DMatch > vmMatches;
+	//float fRatioThreshold = 0.90;
+	float fRatioThreshold = 0.95;
+	for( int j = 0; j < mmatches.size(); j++ )
+	{
+		float fRatio = mmatches[j][0].distance / mmatchesBogus[j][0].distance;
+		//float fRatio = mmatches[j][0].distance / mmatches[j][1].distance;
+		if( fRatio > fRatioThreshold )
+		{
+			mmatches[j][0].queryIdx = -1;
+			mmatches[j][0].trainIdx = -1;
+			mmatches[j][0].imgIdx = -1;
+		}
+		else
+		{
+			vmMatches.push_back( mmatches[j][0] );
+		}
+  }
+  int iMatchCount = houghTransform( queryKeypoints, this->keypointsDatabase, vmMatches, 385, 153 );
+
+  // Tally votes, find frame with the most matches
+	for( int j = 0; j < vmMatches.size(); j++ )
+	{
+		int iImg =  vmMatches[j].imgIdx;
+		if( iImg >= 0 )
+		{
+			vecImgMatches[iImg]++;
+		}
+	}
+
+	vector< int > vecImgMatchesSmooth;
+	vecImgMatchesSmooth.resize( vecImgMatches.size(), 0 );
+
+	int iMaxIndex = -1;
+	int iMaxCount = -1;
+	for( int j = 0; j < vecImgMatches.size(); j++ )
+	{
+		int iCount = vecImgMatches[j];
+		if( iCount > iMaxCount )
+		{
+			iMaxCount = iCount;
+			iMaxIndex = j;
+		}
+		vecImgMatchesSmooth[j] = vecImgMatches[j];
+		if( j > 0 ) vecImgMatchesSmooth[j] += vecImgMatches[j-1];
+		if( j < vecImgMatches.size()-1 ) vecImgMatchesSmooth[j] += vecImgMatches[j+1];
+	}
+
+	for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
+	{
+		vecImgMatches[j] = 0;
+	}
+	for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
+	{
+		if( vecImgMatchesSmooth[j] >= 2 )
+		{
+			// flag neighborhood
+			vecImgMatches[j] = 1;
+			if( j > 0 ) vecImgMatches[j-1]=1;
+			if( j < vecImgMatches.size()-1 ) vecImgMatches[j+1]=1;
+		}
+	}
+
+	// Save all matches
+	vector< DMatch > vmMatchesSmooth;
+	vmMatchesSmooth.clear();
+	for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
+	{
+		if( vecImgMatches[j] > 0 )
+		{
+			for( int k = 0; k < vmMatches.size(); k++ )
+			{
+				int iImg =  vmMatches[k].imgIdx;
+				if( iImg == j )
+				{
+					vmMatchesSmooth.push_back( vmMatches[k] );
+				}
+			}
+		}
+	}
+  oss.clear();
+  oss << "Find Closest Slice end";
+  this->stopWatchWrite(oss);
+
+}
+
+

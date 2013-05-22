@@ -42,10 +42,10 @@ public slots:
   void onVolumeSelect(vtkMRMLNode*);
   void onTrackerSelect(vtkMRMLNode*);
   void toggleRecord();
-  void match();
   void setMinHessian(int);
   void showNextImage();
   void matchWithNextImage();
+  void onBogusPathChanged(const QString&);
 
 protected:
   QScopedPointer<qSlicerSurfFeaturesModuleWidgetPrivate> d_ptr;

@@ -7,8 +7,14 @@
     <x>0</x>
     <y>0</y>
     <width>470</width>
-    <height>405</height>
+    <height>550</height>
    </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
   </property>
   <property name="windowTitle">
    <string>Form</string>
@@ -25,8 +31,14 @@
       </item>
       <item>
        <layout class="QFormLayout" name="parametersFormLayout">
+        <property name="sizeConstraint">
+         <enum>QLayout::SetDefaultConstraint</enum>
+        </property>
         <property name="fieldGrowthPolicy">
-         <enum>QFormLayout::FieldsStayAtSizeHint</enum>
+         <enum>QFormLayout::ExpandingFieldsGrow</enum>
+        </property>
+        <property name="horizontalSpacing">
+         <number>0</number>
         </property>
         <property name="verticalSpacing">
          <number>12</number>
@@ -48,6 +60,12 @@
          <widget class="qMRMLNodeComboBox" name="InputVolumeComboBox">
           <property name="enabled">
            <bool>true</bool>
+          </property>
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
           </property>
           <property name="nodeTypes">
            <stringlist>
@@ -82,6 +100,12 @@
          <widget class="qMRMLNodeComboBox" name="InputTrackerComboBox">
           <property name="enabled">
            <bool>true</bool>
+          </property>
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
           </property>
           <property name="nodeTypes">
            <stringlist>
@@ -128,6 +152,23 @@
           </property>
          </widget>
         </item>
+        <item row="3" column="0">
+         <widget class="QLabel" name="label_3">
+          <property name="text">
+           <string>Bogus data:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="1">
+         <widget class="ctkPathLineEdit" name="bogusPathLineEdit">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+         </widget>
+        </item>
        </layout>
       </item>
       <item>
@@ -137,13 +178,6 @@
         </property>
         <property name="checkable">
          <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="matchButton">
-        <property name="text">
-         <string>Match!</string>
         </property>
        </widget>
       </item>
@@ -209,6 +243,11 @@
    <container>1</container>
   </customwidget>
   <customwidget>
+   <class>ctkPathLineEdit</class>
+   <extends>QWidget</extends>
+   <header>ctkPathLineEdit.h</header>
+  </customwidget>
+  <customwidget>
    <class>qSlicerSurfFeaturesFooBarWidget</class>
    <extends>QWidget</extends>
    <header>qSlicerSurfFeaturesFooBarWidget.h</header>
@@ -230,22 +269,6 @@
     <hint type="destinationlabel">
      <x>20</x>
      <y>20</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>qSlicerSurfFeaturesModuleWidget</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>InputTrackerComboBox</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>234</x>
-     <y>202</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>138</x>
-     <y>99</y>
     </hint>
    </hints>
   </connection>
