@@ -48,15 +48,20 @@ public slots:
   void onBogusPathChanged(const QString&);
   void onTrainPathChanged(const QString&);
   void onQueryPathChanged(const QString&);
+
   void onTrainStartFrameChanged(int);
   void onTrainStopFrameChanged(int);
   void onBogusStartFrameChanged(int);
   void onBogusStopFrameChanged(int);
   void onQueryStartFrameChanged(int);
   void onQueryStopFrameChanged(int);
+
   void onComputeBogus();
   void onComputeTrain();
   void onComputeQuery();
+
+  void onNextImage();
+  void onShowCurrentImage();
 
 protected:
   QScopedPointer<qSlicerSurfFeaturesModuleWidgetPrivate> d_ptr;

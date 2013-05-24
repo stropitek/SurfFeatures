@@ -123,14 +123,14 @@
           </item>
          </layout>
         </item>
-        <item row="2" column="0">
+        <item row="3" column="0">
          <widget class="QLabel" name="label_3">
           <property name="text">
            <string>Bogus data:</string>
           </property>
          </widget>
         </item>
-        <item row="2" column="1">
+        <item row="3" column="1">
          <layout class="QHBoxLayout" name="bogusDataHLayout">
           <item>
            <widget class="ctkPathLineEdit" name="bogusPathLineEdit"/>
@@ -177,14 +177,14 @@
           </item>
          </layout>
         </item>
-        <item row="3" column="0">
+        <item row="5" column="0">
          <widget class="QLabel" name="label">
           <property name="text">
            <string>Query data:</string>
           </property>
          </widget>
         </item>
-        <item row="3" column="1">
+        <item row="5" column="1">
          <layout class="QHBoxLayout" name="queryDataHLayout">
           <item>
            <widget class="ctkPathLineEdit" name="queryPathLineEdit"/>
@@ -228,26 +228,70 @@
           </item>
          </layout>
         </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="label_11">
+          <property name="text">
+           <string/>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QPushButton" name="computeTrainButton">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <property name="text">
+           <string>Load and Compute Train</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="0">
+         <widget class="QLabel" name="label_12">
+          <property name="text">
+           <string>TextLabel</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QPushButton" name="computeBogusButton">
+          <property name="text">
+           <string>Load and Compute Bogus</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="0">
+         <widget class="QLabel" name="label_13">
+          <property name="text">
+           <string/>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="1">
+         <widget class="QPushButton" name="computeQueryButton">
+          <property name="text">
+           <string>Load and Compute Query</string>
+          </property>
+         </widget>
+        </item>
        </layout>
       </item>
       <item>
-       <widget class="QPushButton" name="computeBogusButton">
+       <widget class="QPushButton" name="nextImageButton">
         <property name="text">
-         <string>Load and Compute Bogus</string>
+         <string>Next Image</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="computeTrainButton">
+       <widget class="QPushButton" name="showCurrentImageButton">
         <property name="text">
-         <string>Load and Compute Train</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="computeQueryButton">
-        <property name="text">
-         <string>Load and Compute Query</string>
+         <string>View Current Image</string>
         </property>
        </widget>
       </item>

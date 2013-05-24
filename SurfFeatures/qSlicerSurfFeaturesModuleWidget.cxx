@@ -99,6 +99,9 @@ void qSlicerSurfFeaturesModuleWidget::setup()
   connect(d->computeBogusButton, SIGNAL(clicked()), this, SLOT(onComputeBogus()));
   connect(d->computeTrainButton, SIGNAL(clicked()), this, SLOT(onComputeTrain()));
   connect(d->computeQueryButton, SIGNAL(clicked()), this, SLOT(onComputeQuery()));
+
+  connect(d->nextImageButton, SIGNAL(clicked()), this, SLOT(onNextImage()));
+  connect(d->showCurrentImageButton, SIGNAL(clicked()), this, SLOT(onShowCurrentImage()));
   
 
   vtkSlicerSurfFeaturesLogic* logic = d->logic();
@@ -119,6 +122,9 @@ SLOTDEF_1(int,onQueryStopFrameChanged,setQueryStopFrame);
 SLOTDEF_0(onComputeBogus,computeBogus);
 SLOTDEF_0(onComputeTrain,computeTrain);
 SLOTDEF_0(onComputeQuery,computeQuery);
+
+SLOTDEF_0(onNextImage,nextImage);
+SLOTDEF_0(onShowCurrentImage,showCurrentImage);
 
 void qSlicerSurfFeaturesModuleWidget::onTrainPathChanged(const QString& path)
 {

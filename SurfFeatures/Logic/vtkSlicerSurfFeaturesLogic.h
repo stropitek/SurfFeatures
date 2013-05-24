@@ -80,6 +80,9 @@ public:
   void computeTrain();
   void computeQuery();
 
+  void nextImage();
+  void showCurrentImage();
+
 protected:
   vtkSlicerSurfFeaturesLogic();
   virtual ~vtkSlicerSurfFeaturesLogic();
@@ -101,11 +104,13 @@ private:
   void cropData(cv::Mat& img);
   cv::Mat convertImage(vtkImageData* data);                                                  
   void showImage(vtkMRMLNode* node);
+  void showImage(const cv::Mat& img, const std::vector<cv::KeyPoint>& keypoints);
   
   bool isTracked(vtkMRMLNode* node);
   void initBogusDatabase();
   void findClosestSlice(vtkMRMLNode* queryNode);
   void updateDescriptorMatcher();
+  void updateQueryNode();
   void computeKeypointsAndDescriptors(const cv::Mat& data,\
                                       std::vector<cv::KeyPoint>& keypoints,\
                                       cv::Mat& descriptors);
@@ -159,6 +164,9 @@ private:
   cv::Ptr<cv::DescriptorMatcher> queryDescriptorMatcher;
   
 
+  // MRML nodes
+  vtkMRMLScalarVolumeNode* queryNode;
+
   // Console
   QTextEdit* console;
 
@@ -175,6 +183,7 @@ private:
   int queryStartFrame;
   int queryStopFrame;
   float cropRatios[4];
+  unsigned int currentImgIndex;
 };
 
 
