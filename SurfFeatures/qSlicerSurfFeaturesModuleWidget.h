@@ -23,6 +23,7 @@
 #include "qSlicerSurfFeaturesModuleExport.h"
 
 #include <QString>
+#include <QTimer>
 
 class qSlicerSurfFeaturesModuleWidgetPrivate;
 class qSlicerSurfFeaturesModuleWidget;
@@ -62,6 +63,12 @@ public slots:
 
   void onNextImage();
   void onShowCurrentImage();
+  void onComputeCorrespondences();
+
+  void updateParameters();
+
+  void onTogglePlay();
+  void onPlayIntervalChanged(int);
 
 protected:
   QScopedPointer<qSlicerSurfFeaturesModuleWidgetPrivate> d_ptr;

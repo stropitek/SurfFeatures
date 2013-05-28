@@ -17,6 +17,7 @@
 
 // Qt includes
 #include <QDebug>
+#include <QTimer>
 
 // SlicerQt includes
 #include "qSlicerSurfFeaturesModuleWidget.h"
@@ -36,6 +37,7 @@ class qSlicerSurfFeaturesModuleWidgetPrivate: public Ui_qSlicerSurfFeaturesModul
   Q_DECLARE_PUBLIC(qSlicerSurfFeaturesModuleWidget)
 protected:
   qSlicerSurfFeaturesModuleWidget* const q_ptr;
+  QTimer* timer;
 public:
   ~qSlicerSurfFeaturesModuleWidgetPrivate();
   qSlicerSurfFeaturesModuleWidgetPrivate(qSlicerSurfFeaturesModuleWidget& object);
@@ -49,10 +51,13 @@ public:
 //-----------------------------------------------------------------------------
 qSlicerSurfFeaturesModuleWidgetPrivate::~qSlicerSurfFeaturesModuleWidgetPrivate()
 {
+  delete timer;
 }
 
 qSlicerSurfFeaturesModuleWidgetPrivate::qSlicerSurfFeaturesModuleWidgetPrivate(qSlicerSurfFeaturesModuleWidget& object): q_ptr(&object)
 {
+  timer = new QTimer;
+  timer->setInterval(100);
 }
 
 vtkSlicerSurfFeaturesLogic* qSlicerSurfFeaturesModuleWidgetPrivate::logic() const
@@ -101,11 +106,22 @@ void qSlicerSurfFeaturesModuleWidget::setup()
   connect(d->computeQueryButton, SIGNAL(clicked()), this, SLOT(onComputeQuery()));
 
   connect(d->nextImageButton, SIGNAL(clicked()), this, SLOT(onNextImage()));
-  connect(d->showCurrentImageButton, SIGNAL(clicked()), this, SLOT(onShowCurrentImage()));
-  
+  connect(d->showCurrentImageButton, SIGNAL(clicked()), this, SLOT(onShowCurrentImage())); 
+
+  connect(d->computeCorrespondencesButton, SIGNAL(clicked()), this, SLOT(onComputeCorrespondences()));
+
+  connect(d->timer, SIGNAL(timeout()), this, SLOT(onNextImage()));
+  connect(d->playButton, SIGNAL(clicked()), this, SLOT(onTogglePlay()));
+  connect(d->playIntervalSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onPlayIntervalChanged(int)));
+
+  // call some slots to make them effective from start
+
 
   vtkSlicerSurfFeaturesLogic* logic = d->logic();
   logic->setConsole(d->consoleDebug);
+
+  qvtkConnect(logic, vtkCommand::ModifiedEvent, this, SLOT(updateParameters()));
+
 }
 
 
@@ -125,6 +141,26 @@ SLOTDEF_0(onComputeQuery,computeQuery);
 
 SLOTDEF_0(onNextImage,nextImage);
 SLOTDEF_0(onShowCurrentImage,showCurrentImage);
+SLOTDEF_0(onComputeCorrespondences, computeInterSliceCorrespondence);
+
+void qSlicerSurfFeaturesModuleWidget::onTogglePlay()
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  if(d->timer->isActive()){
+    d->playButton->setText(QString("Start Playing"));
+    d->timer->stop();
+  }
+  else {
+    d->playButton->setText(QString("Stop Playing"));
+    d->timer->start();
+  }
+}
+
+void qSlicerSurfFeaturesModuleWidget::onPlayIntervalChanged(int value)
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  d->timer->setInterval(value);
+}
 
 void qSlicerSurfFeaturesModuleWidget::onTrainPathChanged(const QString& path)
 {
@@ -145,4 +181,23 @@ void qSlicerSurfFeaturesModuleWidget::onBogusPathChanged(const QString& path)
   Q_D(qSlicerSurfFeaturesModuleWidget);
   vtkSlicerSurfFeaturesLogic* logic = d->logic();
   logic->setBogusFile(path.toStdString());
+}
+
+void qSlicerSurfFeaturesModuleWidget::updateParameters()
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+
+  d->queryFromSpinBox->setValue(logic->getQueryStartFrame());
+  d->queryToSpinBox->setValue(logic->getQueryStopFrame());
+  d->trainFromSpinBox->setValue(logic->getTrainStartFrame());
+  d->trainToSpinBox->setValue(logic->getTrainStopFrame());
+  d->bogusFromSpinBox->setValue(logic->getBogusStartFrame());
+  d->bogusToSpinBox->setValue(logic->getBogusStopFrame());
+
+  d->queryProgressBar->setValue(logic->getQueryProgress());
+  d->trainProgressBar->setValue(logic->getTrainProgress());
+  d->bogusProgressBar->setValue(logic->getBogusProgress());
+  d->correspondenceProgressBar->setValue(logic->getCorrespondenceProgress());
+
 }
