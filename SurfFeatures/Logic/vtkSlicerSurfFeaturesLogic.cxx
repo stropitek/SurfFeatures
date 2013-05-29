@@ -2527,7 +2527,6 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->lastStopWatch = clock();
   this->initTime = clock();
   this->minHessian = 200;
-  this->step = 0;
   this->matcherType = "FlannBased";
   this->trainDescriptorMatcher = DescriptorMatcher::create(matcherType);
   this->bogusDescriptorMatcher = DescriptorMatcher::create(matcherType);
@@ -2650,11 +2649,6 @@ void vtkSlicerSurfFeaturesLogic
 {
 }
 
-void vtkSlicerSurfFeaturesLogic::next()
-{
-
-  this->step+=1;
-}
 
 vtkImageData* vtkSlicerSurfFeaturesLogic::cropData(vtkImageData* data)
 {
@@ -3014,6 +3008,7 @@ void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
 
   this->bestMatches.clear();
   this->bestMatchesCount.clear();
+  this->matchesWithBestTrainImage.clear();
   for(int i=0; i<this->queryImages.size(); i++)
   {
     vector<DMatch> matches;
@@ -3025,12 +3020,15 @@ void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
     for( int j = 0; j < vecImgMatches.size(); j++ )
       vecImgMatches[j] = 0;
 
+    // mmatches will contain the 3 closest matches to each keypoint found in the query image
     matchDescriptorsKNN( this->queryDescriptors[i], mmatches, this->trainDescriptorMatcher, 3 );
 	  matchDescriptorsKNN( this->queryDescriptors[i], mmatchesBogus, this->bogusDescriptorMatcher, 1 );
 
+    // Vector that contains the matches remaining after filtering
     vector< DMatch > vmMatches;
 	  //float fRatioThreshold = 0.90;
 	  float fRatioThreshold = 0.95;
+    // Disable best matches if they also have a good match with bogus data
 	  for( int j = 0; j < mmatches.size(); j++ )
 	  {
 		  float fRatio = mmatches[j][0].distance / mmatchesBogus[j][0].distance;
@@ -3043,12 +3041,14 @@ void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
 		  }
 		  else
 		  {
+        // Keep the filtered matches in a 1D vector
 			  vmMatches.push_back( mmatches[j][0] );
 		  }
     }
+    // Do the hough transform. Filters out some more matches from vmMatches.
     int iMatchCount = houghTransform( this->queryKeypoints[i], this->trainKeypoints, vmMatches, 385, 153 );
 
-    // Tally votes, find frame with the most matches
+    // Count the number of votes for each train image
 	  for( int j = 0; j < vmMatches.size(); j++ )
 	  {
 		  int iImg =  vmMatches[j].imgIdx;
@@ -3065,23 +3065,27 @@ void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
 	  int iMaxCount = -1;
 	  for( int j = 0; j < vecImgMatches.size(); j++ )
 	  {
+      // Store the index and count of the training image with the most counts.
 		  int iCount = vecImgMatches[j];
 		  if( iCount > iMaxCount )
 		  {
 			  iMaxCount = iCount;
 			  iMaxIndex = j;
 		  }
+      // Smooth the # of matches curve by convultion with [1 1 1].
 		  vecImgMatchesSmooth[j] = vecImgMatches[j];
 		  if( j > 0 ) vecImgMatchesSmooth[j] += vecImgMatches[j-1];
 		  if( j < vecImgMatches.size()-1 ) vecImgMatchesSmooth[j] += vecImgMatches[j+1];
 	  }
 
+    // vecImgMatches is reinitilised. It will now store flags.
 	  for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
 	  {
 		  vecImgMatches[j] = 0;
 	  }
 	  for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
 	  {
+      // If training image has more than 2 matches (after smoothing), flag the training image and its immediate neighborhood.
 		  if( vecImgMatchesSmooth[j] >= 2 )
 		  {
 			  // flag neighborhood
@@ -3096,6 +3100,7 @@ void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
 	  vmMatchesSmooth.clear();
 	  for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
 	  {
+      // Discard unflagged train images
 		  if( vecImgMatches[j] > 0 )
 		  {
 			  for( int k = 0; k < vmMatches.size(); k++ )
@@ -3108,6 +3113,24 @@ void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
 			  }
 		  }
 	  }
+
+    // This commented part here would be I think a more efficient way for the block just above this
+    //for(int k=0; k < vmMatches.size(); k++)
+    //{
+    //  iImg = vmMatches[k].imgIdx;
+    //  if( vecImgMatches[imgIdx] > 0 )
+    //    continue;
+    //  vmMatchesSmooth.push_back( vmMatches[k] );
+    //}
+
+    vector< DMatch > matchesWithTrain;
+    for(int k=0; k<vmMatches.size(); k++)
+    {
+      if(vmMatches[k].imgIdx == iMaxIndex)
+        matchesWithTrain.push_back(vmMatches[k]);
+    }
+    this->matchesWithBestTrainImage.push_back(matchesWithTrain);
+    
 
     // Record closest match
     this->bestMatches.push_back(iMaxIndex);

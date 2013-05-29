@@ -64,51 +64,17 @@ public:
   vtkTypeMacro(vtkSlicerSurfFeaturesLogic, vtkSlicerModuleLogic);
   void PrintSelf(ostream& os, vtkIndent indent);
 
-  void next();
-  void setConsole(QTextEdit* console);
-  void setMinHessian(int);
 
-  // parameter setters and getters
-  GET(QTextEdit*,console,Console);
-
-  void setBogusFile(std::string);
-  void setTrainFile(std::string);
-  void setQueryFile(std::string);
-  GET(std::string, queryFile, QueryFile);
-  GET(std::string, trainFile, TrainFile);
-  GET(std::string, bogusFile, BogusFile);
   
-  GETSET(int, trainStartFrame, TrainStartFrame);
-  GETSET(int, trainStopFrame, TrainStopFrame);
-  GETSET(int, bogusStartFrame, BogusStartFrame);
-  GETSET(int, bogusStopFrame, BogusStopFrame);
-  GETSET(int,queryStartFrame,QueryStartFrame);
-  GETSET(int,queryStopFrame,QueryStopFrame);
 
-  GET(int, queryProgress, QueryProgress);
-  GET(int, trainProgress, TrainProgress);
-  GET(int, bogusProgress, BogusProgress);
-  GET(int, correspondenceProgress, CorrespondenceProgress);
-  void setQueryProgress(int p);
-  void setTrainProgress(int p);
-  void setBogusProgress(int p);
-  void setCorrespondenceProgress(int p);
-
-  void computeBogus();
-  void computeTrain();
-  void computeQuery();
-
-  void nextImage();
-  void showCurrentImage();
-
-  void computeInterSliceCorrespondence();
+  
 
 protected:
   vtkSlicerSurfFeaturesLogic();
   virtual ~vtkSlicerSurfFeaturesLogic();
 
+  // Callbacks reimplemented from vtkMRMLAbstractLogic
   virtual void SetMRMLSceneInternal(vtkMRMLScene* newScene);
-  /// Register MRML Node classes to Scene. Gets called automatically when the MRMLScene is attached to this logic class.
   virtual void RegisterNodes();
   virtual void UpdateFromMRMLScene();
   virtual void OnMRMLSceneNodeAdded(vtkMRMLNode* node);
@@ -118,20 +84,57 @@ private:
   vtkSlicerSurfFeaturesLogic(const vtkSlicerSurfFeaturesLogic&); // Not implemented
   void operator=(const vtkSlicerSurfFeaturesLogic&);               // Not implemented
 
-  void stopWatchWrite(std::ostringstream& oss);
-  void resetConsoleFont();
+
+  // ============================================
+  // Helper Functions
+  // ============================================
+
+  // Crop data (either opencv or vtk image)
   vtkImageData* cropData(vtkImageData* data);
   void cropData(cv::Mat& img);
+
+  // Conversions from opencv to vtk
   cv::Mat convertImage(vtkImageData* data);
-  void showImage(vtkMRMLNode* node);
-  void showImage(const cv::Mat& img, const std::vector<cv::KeyPoint>& keypoints);
   
+  // Check if tracking info for an image is invalid
   bool isTracked(vtkMRMLNode* node);
-  void initBogusDatabase();
-  void findClosestSlice(vtkMRMLNode* queryNode);
-  void updateDescriptorMatcher();
+
+  // =============================================
+  // Console
+  // =============================================
+  void stopWatchWrite(std::ostringstream& oss);
+  void resetConsoleFont();
+
+  // =============================================
+  // Visualization
+  // =============================================
+
+  // Public Interface to visualization
+public:
+  void showCurrentImage();
+  void nextImage();
+
+private:
+  void showImage(const cv::Mat& img, const std::vector<cv::KeyPoint>& keypoints);
+  void showImage(vtkMRMLNode* node);
   void updateQueryNode();
   void updateMatchNode();
+
+  // =============================================
+  // Opencv computations
+  // =============================================
+  
+  // Public Interface
+public:
+  void computeBogus();
+  void computeTrain();
+  void computeQuery();
+  void findClosestSlice(vtkMRMLNode* queryNode);
+  void computeInterSliceCorrespondence();
+
+  // Private helpers
+private:
+  void updateDescriptorMatcher();
   void computeKeypointsAndDescriptors(const cv::Mat& data,\
                                       std::vector<cv::KeyPoint>& keypoints,\
                                       cv::Mat& descriptors);
@@ -144,20 +147,22 @@ private:
                                        cv::Ptr<cv::DescriptorMatcher> descriptorMatcher,\
                                        int& startFrame, int& stopFrame, std::string who);
 
-  // Attributes
+  
 private:
+  // ============================================
+  // Attributes
+  // ============================================
   // Node
   vtkMRMLScalarVolumeNode* node;
+  vtkMRMLScalarVolumeNode* queryNode;
+  vtkMRMLScalarVolumeNode* matchNode;
 
   // Clock
   clock_t initTime;
   clock_t lastStopWatch;
 
   // State
-  unsigned int step;
-
-  // Action Flags
-
+  unsigned int currentImgIndex;
 
   // train images, keypoints, descriptors and matcher
   std::vector<cv::Mat> trainImages;
@@ -184,14 +189,16 @@ private:
   std::vector<cv::Mat> queryDescriptors;
   cv::Ptr<cv::DescriptorMatcher> queryDescriptorMatcher;
 
-  // Best matches are recorded
-  std::vector<int> bestMatches;
-  std::vector<int> bestMatchesCount;
   
 
-  // MRML nodes
-  vtkMRMLScalarVolumeNode* queryNode;
-  vtkMRMLScalarVolumeNode* matchNode;
+  // Best matches are recorded (when calculating correspondences
+  std::vector<int> bestMatches;
+  std::vector<int> bestMatchesCount;
+
+  // Keep matches between selected train image and query images (when calculating correspondences)
+  // [# query images]*[# kept matches]
+  std::vector<std::vector<DMatch> > matchesWithBestTrainImage;
+  
 
   // Console
   QTextEdit* console;
@@ -215,8 +222,40 @@ private:
   int queryStartFrame;
   int queryStopFrame;
   float cropRatios[4];
-  unsigned int currentImgIndex;
   vtkSmartPointer<vtkMatrix4x4> ImageToProbeTransform;
+
+public:
+  // ======================================
+  // Attribute setters and getters
+  // ======================================
+  void setMinHessian(int);
+
+  // parameter setters and getters
+  GET(QTextEdit*,console,Console);
+  void setConsole(QTextEdit* console);
+
+  void setBogusFile(std::string);
+  void setTrainFile(std::string);
+  void setQueryFile(std::string);
+  GET(std::string, queryFile, QueryFile);
+  GET(std::string, trainFile, TrainFile);
+  GET(std::string, bogusFile, BogusFile);
+  
+  GETSET(int, trainStartFrame, TrainStartFrame);
+  GETSET(int, trainStopFrame, TrainStopFrame);
+  GETSET(int, bogusStartFrame, BogusStartFrame);
+  GETSET(int, bogusStopFrame, BogusStopFrame);
+  GETSET(int,queryStartFrame,QueryStartFrame);
+  GETSET(int,queryStopFrame,QueryStopFrame);
+
+  GET(int, queryProgress, QueryProgress);
+  GET(int, trainProgress, TrainProgress);
+  GET(int, bogusProgress, BogusProgress);
+  GET(int, correspondenceProgress, CorrespondenceProgress);
+  void setQueryProgress(int p);
+  void setTrainProgress(int p);
+  void setBogusProgress(int p);
+  void setCorrespondenceProgress(int p);
 };
 
 
