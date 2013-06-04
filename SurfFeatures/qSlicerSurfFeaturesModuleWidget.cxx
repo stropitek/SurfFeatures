@@ -90,6 +90,13 @@ void qSlicerSurfFeaturesModuleWidget::setup()
 
   connect(d->minHessianSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onMinHessianChanged(int)));
 
+  connect(d->leftCropSpinBox, SIGNAL(valueChanged(double)), this, SLOT(onLeftCropChanged(double)));
+  connect(d->topCropSpinBox, SIGNAL(valueChanged(double)), this, SLOT(onTopCropChanged(double)));
+  connect(d->rightCropSpinBox, SIGNAL(valueChanged(double)), this, SLOT(onRightCropChanged(double)));
+  connect(d->bottomCropSpinBox, SIGNAL(valueChanged(double)), this, SLOT(onBottomCropChanged(double)));
+
+  connect(d->showCropButton, SIGNAL(clicked()), this, SLOT(onShowCrop()));
+
   connect(d->bogusPathLineEdit, SIGNAL(currentPathChanged(const QString&)), this, SLOT(onBogusPathChanged(const QString&)));
   connect(d->trainPathLineEdit, SIGNAL(currentPathChanged(const QString&)), this, SLOT(onTrainPathChanged(const QString&)));
   connect(d->queryPathLineEdit, SIGNAL(currentPathChanged(const QString&)), this, SLOT(onQueryPathChanged(const QString&)));
@@ -122,10 +129,47 @@ void qSlicerSurfFeaturesModuleWidget::setup()
 
   qvtkConnect(logic, vtkCommand::ModifiedEvent, this, SLOT(updateParameters()));
 
+  this->updateParameters();
+
 }
 
 
 SLOTDEF_1(int,onMinHessianChanged, setMinHessian);
+
+void qSlicerSurfFeaturesModuleWidget::onLeftCropChanged(double val)
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  logic->setLeftCrop(val);
+  logic->showCropFirstImage();
+}
+
+void qSlicerSurfFeaturesModuleWidget::onTopCropChanged(double val)
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  logic->setTopCrop(val);
+  logic->showCropFirstImage();
+}
+
+void qSlicerSurfFeaturesModuleWidget::onRightCropChanged(double val)
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  logic->setRightCrop(val);
+  logic->showCropFirstImage();
+}
+
+void qSlicerSurfFeaturesModuleWidget::onBottomCropChanged(double val)
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  logic->setBottomCrop(val);
+  logic->showCropFirstImage();
+}
+
+SLOTDEF_0(onShowCrop, showCropFirstImage);
+
 
 SLOTDEF_1(int,onTrainStartFrameChanged,setTrainStartFrame);
 SLOTDEF_1(int,onBogusStartFrameChanged,setBogusStartFrame);
@@ -199,5 +243,10 @@ void qSlicerSurfFeaturesModuleWidget::updateParameters()
   d->trainProgressBar->setValue(logic->getTrainProgress());
   d->bogusProgressBar->setValue(logic->getBogusProgress());
   d->correspondenceProgressBar->setValue(logic->getCorrespondenceProgress());
+
+  d->leftCropSpinBox->setValue(logic->getLeftCrop());
+  d->topCropSpinBox->setValue(logic->getTopCrop());
+  d->rightCropSpinBox->setValue(logic->getRightCrop());
+  d->bottomCropSpinBox->setValue(logic->getBottomCrop());
 
 }

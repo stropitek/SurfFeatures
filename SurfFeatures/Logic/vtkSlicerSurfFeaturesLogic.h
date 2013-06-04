@@ -99,6 +99,11 @@ private:
   // Check if tracking info for an image is invalid
   bool isTracked(vtkMRMLNode* node);
 
+  // Draw features into the image
+  cv::Mat drawFeatures(const cv::Mat& img, const std::vector<cv::KeyPoint>& keypoints);
+  void drawQueryMatches();
+  void drawBestTrainMatches();
+
   // =============================================
   // Console
   // =============================================
@@ -113,12 +118,14 @@ private:
 public:
   void showCurrentImage();
   void nextImage();
+  void updateQueryNode();
+  void updateMatchNode();
+  void showCropFirstImage();
 
 private:
   void showImage(const cv::Mat& img, const std::vector<cv::KeyPoint>& keypoints);
   void showImage(vtkMRMLNode* node);
-  void updateQueryNode();
-  void updateMatchNode();
+  
 
   // =============================================
   // Opencv computations
@@ -189,6 +196,11 @@ private:
   std::vector<cv::Mat> queryDescriptors;
   cv::Ptr<cv::DescriptorMatcher> queryDescriptorMatcher;
 
+  cv::Mat queryImageWithFeatures;
+  cv::Mat trainImageWithFeatures;
+  cv::Mat firstImage;
+  cv::Mat firstImageCropped;
+
   
 
   // Best matches are recorded (when calculating correspondences
@@ -256,6 +268,11 @@ public:
   void setTrainProgress(int p);
   void setBogusProgress(int p);
   void setCorrespondenceProgress(int p);
+
+  GETSET(double, cropRatios[0], LeftCrop);
+  GETSET(double, cropRatios[1], RightCrop);
+  GETSET(double, cropRatios[2], TopCrop);
+  GETSET(double, cropRatios[3], BottomCrop);
 };
 
 

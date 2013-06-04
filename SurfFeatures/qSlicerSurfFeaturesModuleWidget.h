@@ -46,6 +46,13 @@ public:
 public slots:
   void onMinHessianChanged(int);
 
+  void onLeftCropChanged(double);
+  void onTopCropChanged(double);
+  void onRightCropChanged(double);
+  void onBottomCropChanged(double);
+
+  void onShowCrop();
+
   void onBogusPathChanged(const QString&);
   void onTrainPathChanged(const QString&);
   void onQueryPathChanged(const QString&);

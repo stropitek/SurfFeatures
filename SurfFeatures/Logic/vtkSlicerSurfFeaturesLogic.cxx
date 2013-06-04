@@ -2568,8 +2568,6 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->queryNode->SetName("query node");
   this->matchNode = vtkMRMLScalarVolumeNode::New();
   this->matchNode->SetName("match node");
-
-
 }
 
 void vtkSlicerSurfFeaturesLogic::setQueryProgress(int p){
@@ -2654,7 +2652,7 @@ vtkImageData* vtkSlicerSurfFeaturesLogic::cropData(vtkImageData* data)
 {
   int dims[3];
   data->GetDimensions(dims);
-  vtkSmartPointer<vtkExtractVOI> extractVOI = vtkExtractVOI::New();
+  vtkSmartPointer<vtkExtractVOI> extractVOI = vtkSmartPointer<vtkExtractVOI>::New();
   extractVOI->SetInput(data);
   extractVOI->SetVOI(dims[0]*this->cropRatios[0],dims[0]*this->cropRatios[1],dims[1]*this->cropRatios[2],dims[1]*this->cropRatios[3], 0, 0);
   extractVOI->SetSampleRate(1,1,1);
@@ -2692,6 +2690,9 @@ cv::Mat vtkSlicerSurfFeaturesLogic::convertImage(vtkImageData* image)
 
 void vtkSlicerSurfFeaturesLogic::updateQueryNode()
 {
+  // Stop if don't have loaded any query image yet
+  if(this->queryProgress != 100)
+    return;
   vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
   transform->Identity();
   for(int i=0; i<3; i++)
@@ -2704,7 +2705,7 @@ void vtkSlicerSurfFeaturesLogic::updateQueryNode()
   matrix = combinedTransform->GetMatrix();
   
 
-  const cv::Mat& image = this->queryImages[this->currentImgIndex];
+  const cv::Mat& image = this->queryImageWithFeatures;
   int width = image.cols;
   int height = image.rows;
   vtkSmartPointer<vtkImageImport> importer = vtkSmartPointer<vtkImageImport>::New();
@@ -2716,7 +2717,7 @@ void vtkSlicerSurfFeaturesLogic::updateQueryNode()
   importer->Update();
   vtkImageData* vtkImage = importer->GetOutput();
   
-
+  // vtkImage shares pointer with opencv image
   this->queryNode->SetAndObserveImageData(vtkImage);
   this->queryNode->SetIJKToRASMatrix(matrix);
 
@@ -2727,7 +2728,8 @@ void vtkSlicerSurfFeaturesLogic::updateQueryNode()
 
 void vtkSlicerSurfFeaturesLogic::updateMatchNode()
 {
-  if(this->bestMatches.empty())
+  // Do nothing if we did not calculate correspondences yet
+  if(this->correspondenceProgress != 100)
     return;
   int trainIndex = this->bestMatches[this->currentImgIndex];
   vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
@@ -2742,7 +2744,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNode()
   matrix = combinedTransform->GetMatrix();
   
 
-  const cv::Mat& image = this->trainImages[trainIndex];
+  const cv::Mat& image = this->trainImageWithFeatures;
   int width = image.cols;
   int height = image.rows;
   vtkSmartPointer<vtkImageImport> importer = vtkSmartPointer<vtkImageImport>::New();
@@ -2888,6 +2890,8 @@ void vtkSlicerSurfFeaturesLogic::nextImage()
   std::ostringstream oss;
   oss << "The current image index is " << this->currentImgIndex << std::endl;
   this->console->insertPlainText(oss.str().c_str());
+  this->drawQueryMatches();
+  this->drawBestTrainMatches();
   this->updateQueryNode();
   this->updateMatchNode();
 }
@@ -2899,19 +2903,24 @@ void vtkSlicerSurfFeaturesLogic::showCurrentImage()
 
 void vtkSlicerSurfFeaturesLogic::computeBogus()
 {
+  this->setCorrespondenceProgress(0);
+  this->setBogusProgress(0);
   this->readAndComputeFeaturesOnMhaFile(this->bogusFile, this->bogusImages, this->bogusImagesNames, \
     this->bogusImagesTransform, this->bogusKeypoints, this->bogusDescriptors, this->bogusDescriptorMatcher, this->bogusStartFrame, this->bogusStopFrame, "bogus");
 }
 
 void vtkSlicerSurfFeaturesLogic::computeTrain()
 {
+  this->setCorrespondenceProgress(0);
+  this->setTrainProgress(0);
   this->readAndComputeFeaturesOnMhaFile(this->trainFile, this->trainImages, this->trainImagesNames, \
     this->trainImagesTransform, this->trainKeypoints, this->trainDescriptors, this->trainDescriptorMatcher, this->trainStartFrame, this->trainStopFrame, "train");
 }
 
 void vtkSlicerSurfFeaturesLogic::computeQuery()
 {
-  
+  this->setQueryProgress(0);
+  this->setCorrespondenceProgress(0);
   this->readAndComputeFeaturesOnMhaFile(this->queryFile, this->queryImages, this->queryImagesNames, \
     this->queryImagesTransform, this->queryKeypoints, this->queryDescriptors, this->queryDescriptorMatcher, this->queryStartFrame, this->queryStopFrame, "query");
 }
@@ -2966,6 +2975,8 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
   // Compute keypoints and descriptors
   keypoints.clear();
   descriptors.clear();
+  if(images.size() > 0)
+    this->firstImage = images[0].clone();
   for(int i=0; i<images.size(); i++)
   {
     cropData(images[i]);
@@ -3269,4 +3280,84 @@ void vtkSlicerSurfFeaturesLogic::findClosestSlice(vtkMRMLNode* queryNode)
 
 }
 
+cv::Mat vtkSlicerSurfFeaturesLogic::drawFeatures(const cv::Mat& img, const std::vector<cv::KeyPoint>& keypoints)
+{
+  cv::Mat result = img.clone();
+  int radius = 5;
+  int thickness = 2;
+  int brightness=0;
 
+  for(int i=0; i<keypoints.size(); i++) {
+    cv::Point center = keypoints[i].pt;
+    cv::circle(result,center,radius,brightness,thickness);
+  }
+
+  return result;
+}
+
+
+void vtkSlicerSurfFeaturesLogic::drawQueryMatches()
+{
+  int qidx = this->currentImgIndex;
+  this->queryImageWithFeatures = this->queryImages[qidx].clone();
+  if(this->correspondenceProgress != 100)
+    return;
+  int radius = 5;
+  int thickness = 1;
+  int brightness = 0;
+
+  for(int i=0; i<this->matchesWithBestTrainImage[qidx].size(); i++)
+  {
+    cv::Point center = this->queryKeypoints[qidx][this->matchesWithBestTrainImage[qidx][i].queryIdx].pt;
+    cv::circle(this->queryImageWithFeatures,center,radius,brightness,thickness);
+  }
+}
+void vtkSlicerSurfFeaturesLogic::drawBestTrainMatches()
+{
+  // We don't know best train image if correspondence not computed
+  if(this->correspondenceProgress != 100)
+    return;
+  int qidx = this->currentImgIndex;
+  int tidx = this->bestMatches[this->currentImgIndex];
+  this->trainImageWithFeatures = this->trainImages[tidx].clone();
+  int radius = 5;
+  int thickness = 1;
+  int brightness = 0;
+
+  for(int i=0; i<this->matchesWithBestTrainImage[qidx].size(); i++)
+  {
+    cv::Point center = this->trainKeypoints[tidx][this->matchesWithBestTrainImage[qidx][i].trainIdx].pt;
+    cv::circle(this->trainImageWithFeatures,center,radius,brightness,thickness);
+  }
+}
+
+void vtkSlicerSurfFeaturesLogic::showCropFirstImage()
+{
+  if(this->firstImage.empty())
+    return;
+  this->firstImageCropped = this->firstImage.clone();
+  this->cropData(this->firstImageCropped);
+
+  cv::Mat& image = this->firstImageCropped;
+  int width = image.cols;
+  int height = image.rows;
+  vtkSmartPointer<vtkImageImport> importer = vtkSmartPointer<vtkImageImport>::New();
+  importer->SetDataScalarTypeToUnsignedChar();
+  importer->SetImportVoidPointer(image.data);
+  importer->SetWholeExtent(0,width-1,0, height-1, 0, 0);
+  importer->SetDataExtentToWholeExtent();
+  importer->Update();
+  vtkImageData* vtkImage = importer->GetOutput();
+
+  vtkSmartPointer<vtkMatrix4x4> matrix = vtkSmartPointer<vtkMatrix4x4>::New();
+  matrix->Identity();
+
+  // Pointer is shared with the opencv image
+  this->queryNode->SetAndObserveImageData(vtkImage);
+  this->queryNode->SetIJKToRASMatrix(matrix);
+
+  if(!this->GetMRMLScene()->IsNodePresent(this->queryNode))
+    this->GetMRMLScene()->AddNode(this->queryNode);
+
+
+}
