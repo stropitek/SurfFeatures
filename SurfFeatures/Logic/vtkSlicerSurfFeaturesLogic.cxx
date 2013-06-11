@@ -1644,7 +1644,7 @@ main_prepareDescriptorDatabase(
 
     vector<Mat> trainImages;
     vector<string> trainImagesNames;
-    vector<vector<float>> trainTransforms;
+    vector<vector<float> > trainTransforms;
     vector<vector<KeyPoint> > trainKeypoints;
     vector<Mat> trainDescriptors;
 
@@ -1728,7 +1728,7 @@ main_prepareDescriptorDatabase(
 	
     vector<Mat> trainImages2;
     vector<string> trainImagesNames2;
-    vector<vector<float>> trainTransforms2;
+    vector<vector<float> > trainTransforms2;
     vector<vector<KeyPoint> > trainKeypoints2;
     vector<Mat> trainDescriptors2;
 	//main_readDescriptorDatabase( pcFileWithImages, trainImages2, trainImagesNames2, trainTransforms2, trainKeypoints2,trainDescriptors2 );
@@ -1928,13 +1928,19 @@ addToOutputNonLinear(
 			pfMatVec[1] = kp1.pt.y;
 			pfMatVec[2] = 0;
 			pfMatVec[3] = 1;
-			cvMatMul( (CvArr*)(&(CvMat)matQuery), (CvArr*)(&(CvMat)matVec), (CvArr*)(&(CvMat)matRes1) );
+      CvMat cvMatQuery = (CvMat)matQuery;
+      CvMat cvMatVec = (CvMat)matVec;
+      CvMat cvMatRes1 = (CvMat)matRes1;
+			cvMatMul( (CvArr*)(&cvMatQuery), (CvArr*)(&cvMatVec), (CvArr*)(&cvMatRes1) );
 			
 			pfMatVec[0] = kp2.pt.x;
 			pfMatVec[1] = kp2.pt.y;
 			pfMatVec[2] = 0;
 			pfMatVec[3] = 1;
-			cvMatMul( (CvArr*)(&(CvMat)matTrain), (CvArr*)(&(CvMat)matVec), (CvArr*)(&(CvMat)matRes2) );
+      CvMat cvMatTrain = (CvMat)matTrain;
+      cvMatVec = (CvMat)matVec;
+      CvMat cvMatRes2 = (CvMat)matRes2;
+			cvMatMul( (CvArr*)(&cvMatTrain), (CvArr*)(&cvMatVec), (CvArr*)(&cvMatRes2) );
 
 		}
 	}
@@ -2000,7 +2006,10 @@ test_output(
 
 	// Copy and multiply query image transform 
 	memcpy( pfMatQuery, (&(queryImageTransform[0])), sizeof(float)*12 );
-	cvMatMul( (CvArr*)(&(CvMat)matQuery), (CvArr*)(&(CvMat)matBMatrix), (CvArr*)(&(CvMat)matQueryInv) );
+	CvMat cvMatQuery = (CvMat)matQuery;
+	CvMat cvMatBMatrix = (CvMat)matBMatrix;
+	CvMat cvMatQueryInv = (CvMat)matQueryInv;
+	cvMatMul( (CvArr*)(&cvMatQuery), (CvArr*)(&cvMatBMatrix), (CvArr*)(&cvMatQueryInv) );
 
 	float pfMatQueryIn[4];
 	float pfMatQueryOt[4];
@@ -2022,19 +2031,30 @@ test_output(
 
 				// Copy and multiply train image transform
 				memcpy( pfMatTrain, (&(trainImagesTransforms[iImg][0])), sizeof(float)*12 );
-				cvMatMul( (CvArr*)(&(CvMat)matTrain), (CvArr*)(&(CvMat)matBMatrix), (CvArr*)(&(CvMat)matTrainInv) );
+				CvMat cvMatTrain = (CvMat)matTrain;
+      	cvMatBMatrix = (CvMat)matBMatrix;
+      	CvMat cvMatTrainInv = (CvMat)matTrainInv;
+				cvMatMul( (CvArr*)(&cvMatTrain), (CvArr*)(&cvMatBMatrix), (CvArr*)(&cvMatTrainInv) );
 
 				pfMatQueryIn[0] = kp1.pt.x;
 				pfMatQueryIn[1] = kp1.pt.y;
 				pfMatQueryIn[2] = 0;
 				pfMatQueryIn[3] = 1;
-				cvMatMul( (CvArr*)(&(CvMat)matQueryInv), (CvArr*)(&(CvMat)matQueryIn), (CvArr*)(&(CvMat)matQueryOt) );
+				
+      	cvMatQueryInv = (CvMat)matQueryInv;
+      	CvMat cvMatQueryIn = (CvMat)matQueryIn;
+      	CvMat cvMatQueryOt = (CvMat)matQueryOt;
+				cvMatMul( (CvArr*)(&cvMatQueryInv), (CvArr*)(&cvMatQueryIn), (CvArr*)(&cvMatQueryOt) );
 
 				pfMatTrainIn[0] = kp2.pt.x;
 				pfMatTrainIn[1] = kp2.pt.y;
 				pfMatTrainIn[2] = 0;
 				pfMatTrainIn[3] = 1;
-				cvMatMul( (CvArr*)(&(CvMat)matTrainInv), (CvArr*)(&(CvMat)matTrainIn), (CvArr*)(&(CvMat)matTrainOt) );
+				
+        cvMatTrainInv = (CvMat)matTrainInv;
+        CvMat cvMatTrainIn = (CvMat)matTrainIn;
+        CvMat cvMatTrainOt = (CvMat)matTrainOt;
+				cvMatMul( (CvArr*)(&cvMatTrainInv), (CvArr*)(&cvMatTrainIn), (CvArr*)(&cvMatTrainOt) );
 
 			}
 	}
