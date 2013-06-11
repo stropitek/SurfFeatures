@@ -3036,9 +3036,10 @@ void vtkSlicerSurfFeaturesLogic::showImage(const cv::Mat& img, const std::vector
   cv::Point centroid(x,y);
   cv::circle(img_keypoints, centroid, 20, cv::Scalar(255,255,255), 3);
   
-  cv::startWindowThread();
-  cv::imshow("Keypoints 1", img_keypoints );
+  cvStartWindowThread();
+  cv::imshow("Keypoints", img_keypoints );
   cv::waitKey(0);
+  cvDestroyWindow("Keypoints");
 }
 
 
