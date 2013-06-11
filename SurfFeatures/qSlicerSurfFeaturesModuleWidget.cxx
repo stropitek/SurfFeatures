@@ -114,12 +114,16 @@ void qSlicerSurfFeaturesModuleWidget::setup()
 
   connect(d->nextImageButton, SIGNAL(clicked()), this, SLOT(onNextImage()));
   connect(d->showCurrentImageButton, SIGNAL(clicked()), this, SLOT(onShowCurrentImage())); 
+  connect(d->saveImageButton, SIGNAL(clicked()), this, SLOT(onSaveCurrentImage()));
 
   connect(d->computeCorrespondencesButton, SIGNAL(clicked()), this, SLOT(onComputeCorrespondences()));
 
   connect(d->timer, SIGNAL(timeout()), this, SLOT(onNextImage()));
   connect(d->playButton, SIGNAL(clicked()), this, SLOT(onTogglePlay()));
   connect(d->playIntervalSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onPlayIntervalChanged(int)));
+
+  connect(d->logMatchesButton, SIGNAL(clicked()), this, SLOT(onLogMatches()));
+
 
   // call some slots to make them effective from start
 
@@ -185,7 +189,10 @@ SLOTDEF_0(onComputeQuery,computeQuery);
 
 SLOTDEF_0(onNextImage,nextImage);
 SLOTDEF_0(onShowCurrentImage,showCurrentImage);
+SLOTDEF_0(onSaveCurrentImage,saveCurrentImage);
 SLOTDEF_0(onComputeCorrespondences, computeInterSliceCorrespondence);
+
+SLOTDEF_0(onLogMatches, writeMatches);
 
 void qSlicerSurfFeaturesModuleWidget::onTogglePlay()
 {
@@ -249,4 +256,7 @@ void qSlicerSurfFeaturesModuleWidget::updateParameters()
   d->rightCropSpinBox->setValue(logic->getRightCrop());
   d->bottomCropSpinBox->setValue(logic->getBottomCrop());
 
+  d->bogusPathLineEdit->setCurrentPath(logic->getBogusFile().c_str());
+  d->trainPathLineEdit->setCurrentPath(logic->getTrainFile().c_str());
+  d->queryPathLineEdit->setCurrentPath(logic->getQueryFile().c_str());
 }

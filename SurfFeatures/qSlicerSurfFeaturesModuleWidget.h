@@ -71,11 +71,14 @@ public slots:
   void onNextImage();
   void onShowCurrentImage();
   void onComputeCorrespondences();
+  void onSaveCurrentImage();
 
   void updateParameters();
 
   void onTogglePlay();
   void onPlayIntervalChanged(int);
+
+  void onLogMatches();
 
 protected:
   QScopedPointer<qSlicerSurfFeaturesModuleWidgetPrivate> d_ptr;

@@ -50,6 +50,11 @@
 
 #include "util_macros.h"
 
+// vnl includes
+#include <vnl/vnl_double_3.h>
+#include <vnl/vnl_float_3.h>
+#include <vnl/vnl_matrix.h>
+
 using namespace std;
 using namespace cv;
 
@@ -104,6 +109,10 @@ private:
   void drawQueryMatches();
   void drawBestTrainMatches();
 
+  // Other
+  void computeCentroid(const cv::Mat& mask, int& x, int& y);
+  bool cropRatiosValid();
+
   // =============================================
   // Console
   // =============================================
@@ -120,7 +129,9 @@ public:
   void nextImage();
   void updateQueryNode();
   void updateMatchNode();
+  void updateMatchNodeRansac();
   void showCropFirstImage();
+  void saveCurrentImage();
 
 private:
   void showImage(const cv::Mat& img, const std::vector<cv::KeyPoint>& keypoints);
@@ -136,7 +147,6 @@ public:
   void computeBogus();
   void computeTrain();
   void computeQuery();
-  void findClosestSlice(vtkMRMLNode* queryNode);
   void computeInterSliceCorrespondence();
 
   // Private helpers
@@ -153,6 +163,16 @@ private:
                                        std::vector<cv::Mat>& descriptors,\
                                        cv::Ptr<cv::DescriptorMatcher> descriptorMatcher,\
                                        int& startFrame, int& stopFrame, std::string who);
+
+  // ================================================
+  // Other
+  // ================================================
+  public:
+    // log matches
+    void writeMatches();
+
+  private:
+    int ransac(const std::vector<vnl_double_3>& points, std::vector<int>& inliersIdx, std::vector<int>& planePointsIdx);
 
   
 private:
@@ -175,6 +195,7 @@ private:
   std::vector<cv::Mat> trainImages;
   std::vector<std::string> trainImagesNames;
   std::vector< std::vector<float> > trainImagesTransform;
+  std::vector<std::vector<float> > queryTransformEstimate;
   std::vector<std::vector<cv::KeyPoint> > trainKeypoints;
   std::vector<cv::Mat> trainDescriptors;
   cv::Ptr<cv::DescriptorMatcher> trainDescriptorMatcher;
@@ -201,6 +222,9 @@ private:
   cv::Mat firstImage;
   cv::Mat firstImageCropped;
 
+  cv::Mat mask;
+  cv::Mat croppedMask;
+
   
 
   // Best matches are recorded (when calculating correspondences
@@ -210,6 +234,8 @@ private:
   // Keep matches between selected train image and query images (when calculating correspondences)
   // [# query images]*[# kept matches]
   std::vector<std::vector<DMatch> > matchesWithBestTrainImage;
+  // [# query images] * [# kept matches]
+  std::vector<std::vector<DMatch> > afterHoughMatches;
   
 
   // Console

@@ -35,6 +35,7 @@
 #include <fstream>
 #include <stdio.h>
 #include <iostream>
+#include <math.h>
 
 // MRML includes
 #include <vtkMRMLVolumeNode.h>
@@ -52,6 +53,9 @@
 #include "opencv2/objdetect/objdetect.hpp"
 #include <opencv2/imgproc/imgproc_c.h>
 #include "opencv2/nonfree/gpu.hpp"
+
+// vnl includes
+#include <vnl/vnl_double_3.h>
 
 using namespace std;
 using namespace cv;
@@ -2517,6 +2521,61 @@ main_runMatching(
 
 // TODO: make functions called often inline
 
+
+// ==============================================
+// Functions
+// ==============================================
+vnl_matrix<double> getRotationMatrix(vnl_double_3 & axis, double theta)
+{
+  vnl_matrix<double> result(3,3);
+  result(0,0) = cos(theta)+axis[0]*axis[0]*(1-cos(theta));
+  result(0,1) = axis[0]*axis[1]*(1-cos(theta))-axis[2]*sin(theta);
+  result(0,2) = axis[0]*axis[2]*(1-cos(theta))+axis[1]*sin(theta);
+  result(1,0) = axis[1]*axis[0]*(1-cos(theta))+axis[2]*sin(theta);
+  result(1,1) = cos(theta)+axis[1]*axis[1]*(1-cos(theta));
+  result(1,2) = axis[1]*axis[2]*(1-cos(theta))-axis[0]*sin(theta);
+  result(2,0) = axis[2]*axis[0]*(1-cos(theta))-axis[1]*sin(theta);
+  result(2,1) = axis[2]*axis[1]*(1-cos(theta))+axis[0]*sin(theta);
+  result(2,2) = cos(theta)+axis[2]*axis[2]*(1-cos(theta));
+  result.normalize_columns();
+  return result;
+}
+
+void getAxisAndRotationAngle(vnl_double_3 v, vnl_double_3 v_new, vnl_double_3& axis, double& angle)
+{
+  axis = vnl_cross_3d(v, v_new);
+  angle = acos(dot_product(v,v_new)/(v.two_norm()*v_new.two_norm()));
+}
+
+std::vector<float> vtkToStdMatrix(vtkMatrix4x4* matrix)
+{
+  std::vector<float> result;
+  for(int i=0; i<3; i++)
+  {
+    for(int j=0; j<4; j++)
+      result.push_back(matrix->GetElement(i,j));
+  }
+
+  return result;
+}
+
+void vnlToVtkMatrix(const vnl_matrix<double> vnlMatrix , vtkMatrix4x4* vtkMatrix)
+{
+  vtkMatrix->Identity();
+  int rows = vnlMatrix.rows();
+  int cols = vnlMatrix.cols();
+  if(rows > 4)
+    rows = 4;
+  if(cols > 4)
+    cols = 4;
+  for(int i=0; i<rows; i++)
+  {
+    for(int j=0; j<cols; j++)
+      vtkMatrix->SetElement(i,j,vnlMatrix(i,j));
+  }
+
+}
+
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerSurfFeaturesLogic);
 
@@ -2534,11 +2593,27 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->cropRatios[0] = 1/5.; this->cropRatios[1]= 3./3.9;
   this->cropRatios[2] = 1/6.; this->cropRatios[3] = 3./4.;
 
+  this->setBogusFile("C:\\Users\\DanK\\MProject\\data\\US\\Plus_test\\TrackedImageSequence_20121210_162606.mha");
+  this->setTrainFile("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha");
+  this->setQueryFile("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha");
+
+  this->bogusStartFrame = 0;
+  this->bogusStopFrame = 2;
+  this->trainStartFrame = 0;
+  this->trainStopFrame = 2;
+  this->queryStartFrame = 3;
+  this->queryStopFrame = 5;
+  this->currentImgIndex = 0;
+
+
   // Progress is 0...
   this->queryProgress = 0;
   this->trainProgress = 0;
   this->bogusProgress = 0;
   this->correspondenceProgress = 0;
+
+  // Load mask
+  this->mask = cv::imread("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\mask.bmp",CV_LOAD_IMAGE_GRAYSCALE);
 
   // Initialize Image to Probe transform
   this->ImageToProbeTransform = vtkSmartPointer<vtkMatrix4x4>::New();
@@ -2556,18 +2631,13 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->ImageToProbeTransform->SetElement(2,2,-0.00244457);
   this->ImageToProbeTransform->SetElement(2,3,-17.1613);
 
-  // Start and Stop frames initialisation
-  this->bogusStartFrame = 0;
-  this->bogusStopFrame = this->bogusImages.size()-1;
-  this->trainStartFrame = 0;
-  this->trainStopFrame = this->trainImages.size()-1;
-  this->queryStartFrame = 0;
-  this->queryStopFrame = this->queryImages.size()-1;
-  this->currentImgIndex = 0;
+  
   this->queryNode = vtkMRMLScalarVolumeNode::New();
   this->queryNode->SetName("query node");
   this->matchNode = vtkMRMLScalarVolumeNode::New();
   this->matchNode->SetName("match node");
+
+  this->Modified();
 }
 
 void vtkSlicerSurfFeaturesLogic::setQueryProgress(int p){
@@ -2701,8 +2771,7 @@ void vtkSlicerSurfFeaturesLogic::updateQueryNode()
   vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
   combinedTransform->Concatenate(transform);
   combinedTransform->Concatenate(this->ImageToProbeTransform);
-  vtkSmartPointer<vtkMatrix4x4> matrix = vtkSmartPointer<vtkMatrix4x4>::New();
-  matrix = combinedTransform->GetMatrix();
+  vtkSmartPointer<vtkMatrix4x4> matrix = combinedTransform->GetMatrix();
   
 
   const cv::Mat& image = this->queryImageWithFeatures;
@@ -2740,8 +2809,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNode()
   vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
   combinedTransform->Concatenate(transform);
   combinedTransform->Concatenate(this->ImageToProbeTransform);
-  vtkSmartPointer<vtkMatrix4x4> matrix = vtkSmartPointer<vtkMatrix4x4>::New();
-  matrix = combinedTransform->GetMatrix();
+  vtkSmartPointer<vtkMatrix4x4> matrix = combinedTransform->GetMatrix();
   
 
   const cv::Mat& image = this->trainImageWithFeatures;
@@ -2759,6 +2827,108 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNode()
 
   this->matchNode->SetAndObserveImageData(vtkImage);
   this->matchNode->SetIJKToRASMatrix(matrix);
+
+  if(!this->GetMRMLScene()->IsNodePresent(this->matchNode))
+    this->GetMRMLScene()->AddNode(this->matchNode);
+}
+
+void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
+{
+  // Find coordinates of all keypoints matching with the current query image
+  std::vector<vnl_double_3> points;
+  for(int j=0; j<this->afterHoughMatches[this->currentImgIndex].size(); j++)
+  {
+    int imgIdx = this->afterHoughMatches[this->currentImgIndex][j].imgIdx;
+    if(imgIdx == -1)
+      continue;
+    int tIdx = this->afterHoughMatches[this->currentImgIndex][j].trainIdx;
+
+    vnl_double_3 p;
+    vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
+    transform->Identity();
+    for(int i=0; i<3; i++)
+      for(int j=0; j<4; j++)
+        transform->SetElement(i,j,this->trainImagesTransform[imgIdx][i*4+j]);
+    vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
+    combinedTransform->Concatenate(transform);
+    combinedTransform->Concatenate(this->ImageToProbeTransform);
+    vtkSmartPointer<vtkMatrix4x4> matrix = vtkSmartPointer<vtkMatrix4x4>::New();
+    matrix = combinedTransform->GetMatrix();
+    float point[4];
+    point[0] = this->trainKeypoints[imgIdx][tIdx].pt.x;
+    point[1] = this->trainKeypoints[imgIdx][tIdx].pt.y;
+    point[2] = 0.0;
+    point[3] = 1.0;
+    float tPoint[4];
+    matrix->MultiplyPoint(point,tPoint);
+    points.push_back(vnl_double_3(tPoint[0],tPoint[1],tPoint[2]));
+  }
+  
+  vnl_double_3 old_plane(0.0,0.0,1.0);
+  vnl_double_3 rotationAxis;
+  std::vector<int> inliersIdx;
+  std::vector<int> planePointsIdx;
+  double angle;
+
+  this->ransac(points, inliersIdx, planePointsIdx);
+  if(planePointsIdx.empty())
+  {
+    this->console->insertPlainText("Not enough matches to construct plane\n");
+    return;
+  }
+
+  vnl_double_3 plane = vnl_cross_3d(points[planePointsIdx[0]]-points[planePointsIdx[1]], points[planePointsIdx[0]]-points[planePointsIdx[2]]);
+  plane.normalize();
+  double d = -dot_product(points[planePointsIdx[0]],plane);
+
+
+  vtkSmartPointer<vtkMatrix4x4> rotation = vtkSmartPointer<vtkMatrix4x4>::New();
+  vtkSmartPointer<vtkMatrix4x4> scaling = vtkSmartPointer<vtkMatrix4x4>::New();
+  vtkSmartPointer<vtkMatrix4x4> translation = vtkSmartPointer<vtkMatrix4x4>::New();
+
+  getAxisAndRotationAngle(old_plane, plane, rotationAxis, angle);
+  vnl_matrix<double> vnlRotMat = getRotationMatrix(rotationAxis, angle);
+  vnlToVtkMatrix(vnlRotMat, rotation);
+
+  scaling->Identity();
+  scaling->SetElement(0,0,0.10763);
+  scaling->SetElement(1,1,0.10530);
+  scaling->SetElement(2,2,0.10646);
+
+  translation->Identity();
+  translation->SetElement(2,3,-d);
+
+  vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+  transform->Concatenate(rotation);
+  transform->Concatenate(translation);
+  transform->Concatenate(scaling);
+  vtkSmartPointer<vtkMatrix4x4> estimate = transform->GetMatrix();
+
+  // Translation ...
+
+  // Store the estimate
+  //this->queryTransformEstimate[this->currentImgIndex] = vtkToStdMatrix(estimate);
+
+  cv::Mat& image = this->trainImageWithFeatures;
+  image = cv::Mat(this->queryImages[this->currentImgIndex].rows, this->queryImages[this->currentImgIndex].cols, CV_8U);
+  image.setTo(cv::Scalar::all(255));
+  
+  // TODO draw circles where inliners are...
+
+  int width = image.cols;
+  int height = image.rows;
+  vtkSmartPointer<vtkImageImport> importer = vtkSmartPointer<vtkImageImport>::New();
+  // TODO: check type of opencv image data first...
+  importer->SetDataScalarTypeToUnsignedChar();
+  importer->SetImportVoidPointer(image.data);
+  importer->SetWholeExtent(0,width-1,0, height-1, 0, 0);
+  importer->SetDataExtentToWholeExtent();
+  importer->Update();
+  vtkImageData* vtkImage = importer->GetOutput();
+  
+
+  this->matchNode->SetAndObserveImageData(vtkImage);
+  this->matchNode->SetIJKToRASMatrix(estimate);
 
   if(!this->GetMRMLScene()->IsNodePresent(this->matchNode))
     this->GetMRMLScene()->AddNode(this->matchNode);
@@ -2831,6 +3001,10 @@ void vtkSlicerSurfFeaturesLogic::showImage(const cv::Mat& img, const std::vector
     return;
   cv::Mat img_keypoints;
   cv::drawKeypoints( img, keypoints, img_keypoints, cv::Scalar::all(-1), cv::DrawMatchesFlags::DEFAULT );
+  int x,y;
+  this->computeCentroid(this->croppedMask,x,y);
+  cv::Point centroid(x,y);
+  cv::circle(img_keypoints, centroid, 20, cv::Scalar(255,255,255), 3);
   cv::imshow("Keypoints 1", img_keypoints );
   cv::waitKey(0);
 }
@@ -2864,7 +3038,7 @@ void vtkSlicerSurfFeaturesLogic::computeKeypointsAndDescriptors(const cv::Mat& d
 {
   // Get the descriptor of the current image
   cv::SurfFeatureDetector detector(this->minHessian);
-  detector.detect(data,keypoints);
+  detector.detect(data,keypoints,this->croppedMask);
 
   // Get keypoints' surf descriptors
   cv::SurfDescriptorExtractor extractor;
@@ -2891,9 +3065,10 @@ void vtkSlicerSurfFeaturesLogic::nextImage()
   oss << "The current image index is " << this->currentImgIndex << std::endl;
   this->console->insertPlainText(oss.str().c_str());
   this->drawQueryMatches();
-  this->drawBestTrainMatches();
+  //this->drawBestTrainMatches();
   this->updateQueryNode();
-  this->updateMatchNode();
+  //this->updateMatchNode();
+  this->updateMatchNodeRansac();
 }
 
 void vtkSlicerSurfFeaturesLogic::showCurrentImage()
@@ -2933,10 +3108,8 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
                                                                  cv::Ptr<cv::DescriptorMatcher> descriptorMatcher,\
                                                                  int& startFrame, int& stopFrame, std::string who)
 {
-
-  std::ostringstream oss;
-  oss << "Compute begin";
-  this->stopWatchWrite(oss);
+  if(!this->cropRatiosValid())
+    return;
   const char* pch = &(file)[0];
   // Read images
   if( strstr( pch, ".mha" ) ){
@@ -2975,8 +3148,14 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
   // Compute keypoints and descriptors
   keypoints.clear();
   descriptors.clear();
+  // Store an original image
   if(images.size() > 0)
     this->firstImage = images[0].clone();
+
+  // Crop the mask
+  this->croppedMask = this->mask.clone();
+  cropData(this->croppedMask);
+
   for(int i=0; i<images.size(); i++)
   {
     cropData(images[i]);
@@ -2994,9 +3173,6 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
   }
   descriptorMatcher->clear();
   descriptorMatcher->add(descriptors);
-  oss.clear();
-  oss << "Compute end";
-  this->stopWatchWrite(oss);
 }
 
 void vtkSlicerSurfFeaturesLogic::updateDescriptorMatcher()
@@ -3013,18 +3189,19 @@ void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
   if(this->queryImages.empty() || this->bogusImages.empty() || this->trainImages.empty())
     return;
 
-  std::ostringstream oss;
-  oss << "Compute interslice correspondences begin";
-  this->stopWatchWrite(oss);
-
   this->bestMatches.clear();
   this->bestMatchesCount.clear();
   this->matchesWithBestTrainImage.clear();
+  this->afterHoughMatches.clear();
+
+  // Compute mask centroid
+  int xcentroid, ycentroid;
+  this->computeCentroid(this->croppedMask, xcentroid, ycentroid);
   for(int i=0; i<this->queryImages.size(); i++)
   {
     vector<DMatch> matches;
-    vector<vector<DMatch> > mmatches;
-    vector<vector<DMatch> > mmatchesBogus;
+    vector<vector<DMatch> > mmatches;      // #query keypoints x #depth
+    vector<vector<DMatch> > mmatchesBogus; // #query keypoints x #depth
     vector<int> vecImgMatches;
     vecImgMatches.resize( this->trainKeypoints.size() );
 
@@ -3036,8 +3213,8 @@ void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
 	  matchDescriptorsKNN( this->queryDescriptors[i], mmatchesBogus, this->bogusDescriptorMatcher, 1 );
 
     // Vector that contains the matches remaining after filtering
-    vector< DMatch > vmMatches;
-	  //float fRatioThreshold = 0.90;
+    vector< DMatch > vmMatches; // #query keypoints - #filtered out
+
 	  float fRatioThreshold = 0.95;
     // Disable best matches if they also have a good match with bogus data
 	  for( int j = 0; j < mmatches.size(); j++ )
@@ -3057,7 +3234,8 @@ void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
 		  }
     }
     // Do the hough transform. Filters out some more matches from vmMatches.
-    int iMatchCount = houghTransform( this->queryKeypoints[i], this->trainKeypoints, vmMatches, 385, 153 );
+    int iMatchCount = houghTransform( this->queryKeypoints[i], this->trainKeypoints, vmMatches, xcentroid, ycentroid );
+    this->afterHoughMatches.push_back(vmMatches);
 
     // Count the number of votes for each train image
 	  for( int j = 0; j < vmMatches.size(); j++ )
@@ -3150,135 +3328,8 @@ void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
     int progress = ((i+1)*100)/this->queryImages.size();
     this->setCorrespondenceProgress(progress);
   }
-  oss.clear();
-  oss << "Comute Interslice correspondences end";
-  this->stopWatchWrite(oss);
 }
 
-void vtkSlicerSurfFeaturesLogic::findClosestSlice(vtkMRMLNode* queryNode)
-{
-  ostringstream oss;
-  oss << "Find Closest Slice begin" ;
-  this->stopWatchWrite(oss);
-
-  vtkMRMLScalarVolumeNode* sv_node = vtkMRMLScalarVolumeNode::SafeDownCast(queryNode);
-  vtkImageData* data = sv_node->GetImageData();
-  if(!data)
-    return;
-
-  // Crop, then convert to opencv matrix
-  vtkImageData* cdata = this->cropData(data);
-  cv::Mat queryImage = this->convertImage(cdata);
-
-  vector<KeyPoint> queryKeypoints;
-  Mat queryDescriptors;
-  this->computeKeypointsAndDescriptors(queryImage, queryKeypoints, queryDescriptors);
-
-  oss.clear();
-  oss << "Keypoints and descriptors calculated";
-  this->stopWatchWrite(oss);
-  if( queryKeypoints.size() == 0 )
-		return;
-
-  vector<DMatch> matches;
-  vector<vector<DMatch> > mmatches;
-  vector<vector<DMatch> > mmatchesBogus;
-  vector<int> vecImgMatches;
-  vecImgMatches.resize( this->trainKeypoints.size() );
-
-  for( int j = 0; j < vecImgMatches.size(); j++ )
-    vecImgMatches[j] = 0;
-
-  this->updateDescriptorMatcher();
-
-  matchDescriptorsKNN( queryDescriptors, mmatches, this->trainDescriptorMatcher, 3 );
-	matchDescriptorsKNN( queryDescriptors, mmatchesBogus, this->bogusDescriptorMatcher, 1 );
-
-  vector< DMatch > vmMatches;
-	//float fRatioThreshold = 0.90;
-	float fRatioThreshold = 0.95;
-	for( int j = 0; j < mmatches.size(); j++ )
-	{
-		float fRatio = mmatches[j][0].distance / mmatchesBogus[j][0].distance;
-		//float fRatio = mmatches[j][0].distance / mmatches[j][1].distance;
-		if( fRatio > fRatioThreshold )
-		{
-			mmatches[j][0].queryIdx = -1;
-			mmatches[j][0].trainIdx = -1;
-			mmatches[j][0].imgIdx = -1;
-		}
-		else
-		{
-			vmMatches.push_back( mmatches[j][0] );
-		}
-  }
-  int iMatchCount = houghTransform( queryKeypoints, this->trainKeypoints, vmMatches, 385, 153 );
-
-  // Tally votes, find frame with the most matches
-	for( int j = 0; j < vmMatches.size(); j++ )
-	{
-		int iImg =  vmMatches[j].imgIdx;
-		if( iImg >= 0 )
-		{
-			vecImgMatches[iImg]++;
-		}
-	}
-
-	vector< int > vecImgMatchesSmooth;
-	vecImgMatchesSmooth.resize( vecImgMatches.size(), 0 );
-
-	int iMaxIndex = -1;
-	int iMaxCount = -1;
-	for( int j = 0; j < vecImgMatches.size(); j++ )
-	{
-		int iCount = vecImgMatches[j];
-		if( iCount > iMaxCount )
-		{
-			iMaxCount = iCount;
-			iMaxIndex = j;
-		}
-		vecImgMatchesSmooth[j] = vecImgMatches[j];
-		if( j > 0 ) vecImgMatchesSmooth[j] += vecImgMatches[j-1];
-		if( j < vecImgMatches.size()-1 ) vecImgMatchesSmooth[j] += vecImgMatches[j+1];
-	}
-
-	for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
-	{
-		vecImgMatches[j] = 0;
-	}
-	for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
-	{
-		if( vecImgMatchesSmooth[j] >= 2 )
-		{
-			// flag neighborhood
-			vecImgMatches[j] = 1;
-			if( j > 0 ) vecImgMatches[j-1]=1;
-			if( j < vecImgMatches.size()-1 ) vecImgMatches[j+1]=1;
-		}
-	}
-
-	// Save all matches
-	vector< DMatch > vmMatchesSmooth;
-	vmMatchesSmooth.clear();
-	for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
-	{
-		if( vecImgMatches[j] > 0 )
-		{
-			for( int k = 0; k < vmMatches.size(); k++ )
-			{
-				int iImg =  vmMatches[k].imgIdx;
-				if( iImg == j )
-				{
-					vmMatchesSmooth.push_back( vmMatches[k] );
-				}
-			}
-		}
-	}
-  oss.clear();
-  oss << "Find Closest Slice end";
-  this->stopWatchWrite(oss);
-
-}
 
 cv::Mat vtkSlicerSurfFeaturesLogic::drawFeatures(const cv::Mat& img, const std::vector<cv::KeyPoint>& keypoints)
 {
@@ -3335,6 +3386,8 @@ void vtkSlicerSurfFeaturesLogic::showCropFirstImage()
 {
   if(this->firstImage.empty())
     return;
+  if(!this->cropRatiosValid())
+    return;
   this->firstImageCropped = this->firstImage.clone();
   this->cropData(this->firstImageCropped);
 
@@ -3361,3 +3414,167 @@ void vtkSlicerSurfFeaturesLogic::showCropFirstImage()
 
 
 }
+
+void vtkSlicerSurfFeaturesLogic::saveCurrentImage()
+{
+  if(this->queryImages.empty())
+    return;
+  std::string fn = this->queryImagesNames[this->currentImgIndex];
+  fn.replace(fn.end()-4,fn.end(),".bmp");
+  cv::imwrite(std::string("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\")+fn,this->queryImages[this->currentImgIndex]);
+}
+
+
+int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, std::vector<int>& inliersIdx, std::vector<int>& planePointsIdx)
+{
+  inliersIdx.clear();
+  planePointsIdx.clear();
+
+  if(points.size()==3)
+  {
+    planePointsIdx.push_back(0);
+    planePointsIdx.push_back(1);
+    planePointsIdx.push_back(2);
+    return 0;
+  }
+  else if(points.size()<3)
+    return 1;
+
+  int iIterations = 100;
+  float threshold = 1; // (mm)
+  int iClose = 10; // Number of close values needed to assert model fits data well
+
+  // current and best model parameters
+  vnl_double_3 currentN;
+  double currentD;
+  vnl_double_3 bestN;
+
+  // Error
+  double numOutliersBest = points.size();
+  double bestError = DBL_MAX;
+
+  for(int i=0; i<iIterations; i++)
+  {
+    // Select three points randomly
+    int idx[3] = {0,0,0};
+    while(idx[0]==idx[1] || idx[1]==idx[2] || idx[0]==idx[2])
+    {
+      idx[0] = rand()%points.size();
+      idx[1] = rand()%points.size();
+      idx[2] = rand()%points.size();
+    }
+
+    // Compute the plane based on these three point
+    vnl_double_3 p1,p2,p3;
+    p1 = points[idx[0]];
+    p2 = points[idx[1]];
+    p3 = points[idx[2]]; 
+
+    vnl_double_3 v1,v2;
+    v1 = p1-p2;
+    v2 = p1-p3;
+    v1.normalize();
+    v2.normalize();
+
+    // Make sure the vectors are not colinear to avoid numerical problems
+    if(abs(dot_product(v1,v2)) > 0.999)
+      continue;
+    
+    currentN = vnl_cross_3d(v1,v2);       // Because (a,b,c) is given by normal vector
+    currentN.normalize();
+    currentD = -dot_product(p1,currentN); // Because a.x1+b.x2+c.x3+d=0
+    
+
+    // Compute error of current model
+    double numOutliers = 0;
+    double currentError = 0;
+    std::vector<int> tmpInliers;
+    for(int j=0; j<points.size(); j++)
+    {
+      // Ignore points selected for current model
+      if(j==idx[0] || j==idx[1] || j==idx[2])
+        continue;
+      vnl_double_3 point;
+      point[0] = points[j][0];
+      point[1] = points[j][1];
+      point[2] = points[j][2];
+      // Calculate distance between plane and point
+      float dist = abs(dot_product(currentN,point)+currentD);
+      if(dist>threshold)
+      {
+        numOutliers = numOutliers+1;
+      }
+      else
+      {
+        currentError += dist;
+        tmpInliers.push_back(j);
+      }
+    }
+    if(numOutliers < numOutliersBest || (numOutliers==numOutliersBest && currentError<bestError))
+    {
+      numOutliersBest = numOutliers;
+      bestN = currentN;
+      bestError = currentError;
+      planePointsIdx.clear();
+      planePointsIdx.push_back(idx[0]);
+      planePointsIdx.push_back(idx[1]);
+      planePointsIdx.push_back(idx[2]);
+      inliersIdx = tmpInliers;
+    }
+  }
+  std::ostringstream oss;
+  oss << "Mean distance of inliers to plane: " << bestError/inliersIdx.size() << std::endl;
+  this->console->insertPlainText(oss.str().c_str());
+  return 0;
+}
+
+void vtkSlicerSurfFeaturesLogic::computeCentroid(const cv::Mat& mask, int& x, int& y)
+{
+  float rowcentroid=0;
+  float colcentroid=0;
+  int count = 0;
+  for(int i=0; i<mask.rows; i++)
+  {
+    for(int j=0; j<mask.cols; j++)
+    {
+      if(mask.at<unsigned char>(i,j) > 0)
+      {
+        rowcentroid += i;
+        colcentroid += j;
+        count += 1;
+      }
+    }
+  }
+  rowcentroid /= count;
+  colcentroid /= count;
+  y = (int)rowcentroid;
+  x = (int)colcentroid;
+}
+
+bool vtkSlicerSurfFeaturesLogic::cropRatiosValid()
+{
+  return (this->cropRatios[0] < this->cropRatios[1] || this->cropRatios[2] < this->cropRatios[3]);
+}
+
+void vtkSlicerSurfFeaturesLogic::writeMatches()
+{
+  const std::vector<std::vector<DMatch> >& m = this->afterHoughMatches;
+  std::ofstream ofs("C:\\Users\\DanK\\MProject\\data\\matches.txt");
+  for(int i=0; i < m.size(); i++)
+  {
+    int iMatches = 0;
+    for(int j=0; j<m[i].size(); j++)
+    {
+      if(m[i][j].imgIdx != -1)
+        iMatches++;
+    }
+    for(int j=0; j<m[i].size(); j++)
+    {
+      if(m[i][j].imgIdx == -1)
+        continue;
+      ofs << iMatches << "|" << this->queryImagesNames[i] << "|" << this->trainImagesNames[m[i][j].imgIdx] << std::endl;
+    }
+  }
+  ofs.close();
+}
+

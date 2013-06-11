@@ -481,6 +481,20 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="saveImageButton">
+        <property name="text">
+         <string>Save Current Image</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="logMatchesButton">
+        <property name="text">
+         <string>Log Matches</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QTextEdit" name="consoleDebug">
         <property name="maximumSize">
          <size>
