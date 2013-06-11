@@ -484,7 +484,7 @@ void readTrainTransforms_mha(
 
     trainFilenames.clear();
 
-    ifstream file( filename.c_str(), 0x21 );
+    ifstream file( filename.c_str() );
     if ( !file.is_open() )
         return;
 
@@ -612,7 +612,7 @@ void splitFile_mha(
     const char dlmtr = '/';
 #endif
 
-    ifstream file( filename.c_str(), 0x21 );
+    ifstream file( filename.c_str() );
     if ( !file.is_open() )
         return;
 
@@ -2613,9 +2613,15 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->cropRatios[0] = 1/5.; this->cropRatios[1]= 3./3.9;
   this->cropRatios[2] = 1/6.; this->cropRatios[3] = 3./4.;
 
-  this->setBogusFile("C:\\Users\\DanK\\MProject\\data\\US\\Plus_test\\TrackedImageSequence_20121210_162606.mha");
-  this->setTrainFile("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha");
-  this->setQueryFile("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha");
+  #ifdef WIN32
+    this->setBogusFile("C:\\Users\\DanK\\MProject\\data\\US\\Plus_test\\TrackedImageSequence_20121210_162606.mha");
+    this->setTrainFile("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha");
+    this->setQueryFile("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha");
+  #else
+    this->setBogusFile("/Users/dkostro/Projects/MProject/data/US/Plus_test/TrackedImageSequence_20121210_162606.mha");
+    this->setTrainFile("/Users/dkostro/Projects/MProject/data/US/decemberUS/TrackedImageSequence_20121211_095535.mha");
+    this->setQueryFile("/Users/dkostro/Projects/MProject/data/US/decemberUS/TrackedImageSequence_20121211_095535.mha");
+  #endif
 
   this->bogusStartFrame = 0;
   this->bogusStopFrame = 2;
@@ -2633,7 +2639,11 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->correspondenceProgress = 0;
 
   // Load mask
-  this->mask = cv::imread("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\mask.bmp",CV_LOAD_IMAGE_GRAYSCALE);
+  #ifdef WIN32
+    this->mask = cv::imread("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\mask.bmp",CV_LOAD_IMAGE_GRAYSCALE);
+  #else
+    this->mask = cv::imread("/Users/dkostro/Projects/MProject/data/US/masks/mask.bmp", CV_LOAD_IMAGE_GRAYSCALE);
+  #endif
 
   // Initialize Image to Probe transform
   this->ImageToProbeTransform = vtkSmartPointer<vtkMatrix4x4>::New();
@@ -3025,6 +3035,8 @@ void vtkSlicerSurfFeaturesLogic::showImage(const cv::Mat& img, const std::vector
   this->computeCentroid(this->croppedMask,x,y);
   cv::Point centroid(x,y);
   cv::circle(img_keypoints, centroid, 20, cv::Scalar(255,255,255), 3);
+  
+  cv::startWindowThread();
   cv::imshow("Keypoints 1", img_keypoints );
   cv::waitKey(0);
 }
