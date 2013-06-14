@@ -2810,14 +2810,15 @@ void vtkSlicerSurfFeaturesLogic::updateQueryNode()
   vtkSmartPointer<vtkImageImport> importer = vtkSmartPointer<vtkImageImport>::New();
   // TODO: check type of opencv image data first...
   importer->SetDataScalarTypeToUnsignedChar();
-  importer->SetImportVoidPointer(image.data);
+  importer->SetImportVoidPointer(image.data,1); // Save argument to 1 won't destroy the pointer when importer destroyed
   importer->SetWholeExtent(0,width-1,0, height-1, 0, 0);
   importer->SetDataExtentToWholeExtent();
   importer->Update();
-  vtkImageData* vtkImage = importer->GetOutput();
+  // You've got to keep a reference of that vtkimage data somewhere, because the node does not make a deep copy in SetAndObserveImageData
+  this->queryImageData = importer->GetOutput();
   
   // vtkImage shares pointer with opencv image
-  this->queryNode->SetAndObserveImageData(vtkImage);
+  this->queryNode->SetAndObserveImageData(this->queryImageData);
   this->queryNode->SetIJKToRASMatrix(matrix);
 
   if(!this->GetMRMLScene()->IsNodePresent(this->queryNode))
@@ -2852,10 +2853,11 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNode()
   importer->SetWholeExtent(0,width-1,0, height-1, 0, 0);
   importer->SetDataExtentToWholeExtent();
   importer->Update();
-  vtkImageData* vtkImage = importer->GetOutput();
+  this->matchImageData = importer->GetOutput();
   
 
-  this->matchNode->SetAndObserveImageData(vtkImage);
+  this->queryImageData = importer->GetOutput();
+  this->matchNode->SetAndObserveImageData(this->matchImageData);
   this->matchNode->SetIJKToRASMatrix(matrix);
 
   if(!this->GetMRMLScene()->IsNodePresent(this->matchNode))
@@ -2954,10 +2956,10 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   importer->SetWholeExtent(0,width-1,0, height-1, 0, 0);
   importer->SetDataExtentToWholeExtent();
   importer->Update();
-  vtkImageData* vtkImage = importer->GetOutput();
+  this->matchImageData = importer->GetOutput();
   
 
-  this->matchNode->SetAndObserveImageData(vtkImage);
+  this->matchNode->SetAndObserveImageData(this->matchImageData);
   this->matchNode->SetIJKToRASMatrix(estimate);
 
   if(!this->GetMRMLScene()->IsNodePresent(this->matchNode))
@@ -3098,10 +3100,10 @@ void vtkSlicerSurfFeaturesLogic::nextImage()
   oss << "The current image index is " << this->currentImgIndex << std::endl;
   this->console->insertPlainText(oss.str().c_str());
   this->drawQueryMatches();
-  //this->drawBestTrainMatches();
+  this->drawBestTrainMatches();
   this->updateQueryNode();
-  //this->updateMatchNode();
-  this->updateMatchNodeRansac();
+  this->updateMatchNode();
+  //this->updateMatchNodeRansac();
 }
 
 void vtkSlicerSurfFeaturesLogic::showCurrentImage()

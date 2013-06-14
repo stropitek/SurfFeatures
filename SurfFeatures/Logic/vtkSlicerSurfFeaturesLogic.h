@@ -222,6 +222,9 @@ private:
   cv::Mat firstImage;
   cv::Mat firstImageCropped;
 
+  vtkSmartPointer<vtkImageData> queryImageData;
+  vtkSmartPointer<vtkImageData> matchImageData;
+
   cv::Mat mask;
   cv::Mat croppedMask;
 
