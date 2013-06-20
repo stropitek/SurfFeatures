@@ -18,7 +18,7 @@
 // SurfFeatures Logic includes
 #include "vtkSlicerSurfFeaturesLogic.h"
 
-// MRML includes
+// MRML includes 
 
 // VTK includes
 #include <vtkNew.h>
@@ -2561,10 +2561,15 @@ vnl_matrix<double> getRotationMatrix(vnl_double_3 & axis, double theta)
   return result;
 }
 
+double getAngle(const vnl_double_3& u, const vnl_double_3& v)
+{
+  return acos(dot_product(u,v)/(u.two_norm()*v.two_norm()));
+}
+
 void getAxisAndRotationAngle(vnl_double_3 v, vnl_double_3 v_new, vnl_double_3& axis, double& angle)
 {
   axis = vnl_cross_3d(v, v_new);
-  angle = acos(dot_product(v,v_new)/(v.two_norm()*v_new.two_norm()));
+  angle = getAngle(v,v_new);
 }
 
 std::vector<float> vtkToStdMatrix(vtkMatrix4x4* matrix)
@@ -3100,10 +3105,10 @@ void vtkSlicerSurfFeaturesLogic::nextImage()
   oss << "The current image index is " << this->currentImgIndex << std::endl;
   this->console->insertPlainText(oss.str().c_str());
   this->drawQueryMatches();
-  this->drawBestTrainMatches();
+  //this->drawBestTrainMatches();
   this->updateQueryNode();
-  this->updateMatchNode();
-  //this->updateMatchNodeRansac();
+  //this->updateMatchNode();
+  this->updateMatchNodeRansac();
 }
 
 void vtkSlicerSurfFeaturesLogic::showCurrentImage()

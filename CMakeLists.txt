@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 2.8.9)
 
-
 #-----------------------------------------------------------------------------
 if(NOT Slicer_SOURCE_DIR)
   set(EXTENSION_NAME SurfFeatures)
@@ -24,20 +23,21 @@ find_package(Git REQUIRED)
 #-----------------------------------------------------------------------------
 option(${EXTENSION_NAME}_SUPERBUILD "Build ${EXTENSION_NAME} and the projects it depends on via SuperBuild.cmake." ON)
 mark_as_advanced(${EXTENSION_NAME}_SUPERBUILD)
+message(STATUS ${${EXTENSION_NAME}_SUPERBUILD})
 if(${EXTENSION_NAME}_SUPERBUILD)
-  if(NOT OpenCV_DIR)
+  if(NOT OpenCV_DIR OR NOT nlopt_DIR)
+    message(STATUS "Include Superbuild")
     include("${CMAKE_CURRENT_SOURCE_DIR}/SuperBuild.cmake")
     return()
   endif()
 endif()
 
 
-
 find_package(OpenCV REQUIRED)
 
 
-
 #-----------------------------------------------------------------------------
+message(STATUS "Add SurfFeatures subdirectory")
 add_subdirectory(SurfFeatures)
 
 #-----------------------------------------------------------------------------

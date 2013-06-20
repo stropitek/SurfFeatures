@@ -19,17 +19,21 @@ set(${KIT}_TARGET_LIBRARIES
   ${ITK_LIBRARIES}
   )
   
+  
+# get_cmake_property(_variableNames VARIABLES)
+# foreach (_variableName ${_variableNames})
+#   message(STATUS "${_variableName}=${${_variableName}}")
+# endforeach()
 
-get_cmake_property(_variableNames VARIABLES)
-foreach (_variableName ${_variableNames})
-  message(STATUS "${_variableName}=${${_variableName}}")
-endforeach()
+message(STATUS "nlopt include: ${NLOPT_INCLUDE_DIRECTORIES}")
+message(STATUS "nlopt library: ${NLOPT_LIBRARIES}")
+message(STATUS "nlopt dir: ${NLOPT_DIR}")
 
 #-----------------------------------------------------------------------------
 SlicerMacroBuildModuleLogic(
   NAME ${KIT}
   EXPORT_DIRECTIVE ${${KIT}_EXPORT_DIRECTIVE}
-  INCLUDE_DIRECTORIES ${${KIT}_INCLUDE_DIRECTORIES} ${OpenCV_INCLUDE_DIRS}
+  INCLUDE_DIRECTORIES ${${KIT}_INCLUDE_DIRECTORIES} ${OpenCV_INCLUDE_DIRS} ${NLOPT_INCLUDE_DIRECTORIES}
   SRCS ${${KIT}_SRCS}
-  TARGET_LIBRARIES ${${KIT}_TARGET_LIBRARIES} ${OpenCV_LIBS}
+  TARGET_LIBRARIES ${${KIT}_TARGET_LIBRARIES} ${OpenCV_LIBS} ${NLOPT_LIBRARIES}
   )
