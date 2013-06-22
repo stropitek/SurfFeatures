@@ -570,20 +570,20 @@ void readTrainTransforms_mha(
 	unsigned char *pucImgData = new unsigned char[iImgRows*iImgCols];
 	Mat mtImg(iImgRows, iImgCols, CV_8UC1, pucImgData);
 
-	// Read & write images
-	for( int i = 0; i < iImgCount; i++ )
-	{
-		Mat mtImgNew = mtImg.clone();
-		fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
-        trainImages.push_back( mtImgNew );
-		//imwrite( trainFilenames[i], trainImages[i] );
-		//imwrite( trainFilenames[i], mtImgNew );
-    }
+  // Read & write images
+  for( int i = 0; i < iImgCount; i++ )
+  {
+    Mat mtImgNew = mtImg.clone();
+    fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
+    trainImages.push_back( mtImgNew );
+    //imwrite( trainFilenames[i], trainImages[i] );
+    //imwrite( trainFilenames[i], mtImgNew );
+  }
 
-	for( int i = 0; i < iImgCount; i++ )
-	{
-		//imwrite( trainFilenames[i], trainImages[i] );
-    }
+  for( int i = 0; i < iImgCount; i++ )
+  {
+    //imwrite( trainFilenames[i], trainImages[i] );
+  }
 
 
 	delete [] pucImgData;
@@ -2543,7 +2543,7 @@ main_runMatching(
 
 
 // ==============================================
-// Functions
+// Geometry Functions
 // ==============================================
 vnl_matrix<double> getRotationMatrix(vnl_double_3 & axis, double theta)
 {
@@ -2559,6 +2559,37 @@ vnl_matrix<double> getRotationMatrix(vnl_double_3 & axis, double theta)
   result(2,2) = cos(theta)+axis[2]*axis[2]*(1-cos(theta));
   result.normalize_columns();
   return result;
+}
+
+vnl_matrix<double> convertVnlVectorToMatrix(const vnl_double_3& v)
+{
+  vnl_matrix<double> result(3,1);
+  result(0,0) = v[0];
+  result(1,0) = v[1];
+  result(2,0) = v[2];
+  return result;
+}
+
+vnl_double_3 convertVnlMatrixToVector(const vnl_matrix<double>& m)
+{
+  vnl_double_3 result;
+  if(m.rows()==1 && m.cols()==3) {
+    for(int i=0; i<3; i++)
+      result[i] = m(0,i);
+  }
+  else if(m.rows()==3 && m.cols()==1) {
+    for(int i=0; i<3; i++)
+      result[i] = m(i,0);
+  }
+  return result;
+}
+
+vnl_double_3 projectPoint(vnl_double_3 point, vnl_double_3 normalToPlane, double offset)
+{
+  normalToPlane.normalize();
+  double dist = dot_product(point, normalToPlane) + offset;
+  vnl_double_3 vec = dist*normalToPlane;
+  return point - vec;
 }
 
 double getAngle(const vnl_double_3& u, const vnl_double_3& v)
@@ -2872,13 +2903,17 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNode()
 void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
 {
   // Find coordinates of all keypoints matching with the current query image
-  std::vector<vnl_double_3> points;
+  // Train points in the x,y,z patient coordinates
+  std::vector<vnl_double_3> trainPoints;
+  // Query points in the u,v image coordinates
+  std::vector<vnl_double_3> queryPoints;
   for(int j=0; j<this->afterHoughMatches[this->currentImgIndex].size(); j++)
   {
     int imgIdx = this->afterHoughMatches[this->currentImgIndex][j].imgIdx;
     if(imgIdx == -1)
       continue;
     int tIdx = this->afterHoughMatches[this->currentImgIndex][j].trainIdx;
+    int qIdx = this->afterHoughMatches[this->currentImgIndex][j].queryIdx;
 
     vnl_double_3 p;
     vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
@@ -2898,8 +2933,10 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     point[3] = 1.0;
     float tPoint[4];
     matrix->MultiplyPoint(point,tPoint);
-    points.push_back(vnl_double_3(tPoint[0],tPoint[1],tPoint[2]));
+    trainPoints.push_back(vnl_double_3(tPoint[0],tPoint[1],tPoint[2]));
+    queryPoints.push_back(vnl_double_3(this->queryKeypoints[this->currentImgIndex][qIdx].pt.x, this->queryKeypoints[this->currentImgIndex][qIdx].pt.y, 0.0));
   }
+  
   
   vnl_double_3 old_plane(0.0,0.0,1.0);
   vnl_double_3 rotationAxis;
@@ -2907,39 +2944,112 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   std::vector<int> planePointsIdx;
   double angle;
 
-  this->ransac(points, inliersIdx, planePointsIdx);
+  this->ransac(trainPoints, inliersIdx, planePointsIdx);
   if(planePointsIdx.empty())
   {
     this->console->insertPlainText("Not enough matches to construct plane\n");
     return;
   }
 
-  vnl_double_3 plane = vnl_cross_3d(points[planePointsIdx[0]]-points[planePointsIdx[1]], points[planePointsIdx[0]]-points[planePointsIdx[2]]);
+  vnl_double_3 plane = vnl_cross_3d(trainPoints[planePointsIdx[0]]-trainPoints[planePointsIdx[1]], trainPoints[planePointsIdx[0]]-trainPoints[planePointsIdx[2]]);
   plane.normalize();
-  double d = -dot_product(points[planePointsIdx[0]],plane);
+  double d = -dot_product(trainPoints[planePointsIdx[0]],plane);
+  
+  // Project the train keypoints to the computed plane
+  std::vector<vnl_double_3> projTrainPoints;
+  for(int i=0; i<trainPoints.size(); i++)
+  {
+    projTrainPoints.push_back(projectPoint(trainPoints[i], plane, d));
+  }
+  
+  // In this plane normal vector we got wx,wy,wz figured out. Now we want ux,uy,uz
+  int iter = projTrainPoints.size()*4<100 ? projTrainPoints.size() : 100;
+  vnl_double_3 u(0,0,0);
+  for(int i=0; i<iter; i++)
+  {
+    // randomly get two inliers
+    int idx1=0, idx2=0;
+    while(idx1==idx2){
+      idx1 = rand()%inliersIdx.size();
+      idx2 = rand()%inliersIdx.size();
+    }
+    // compute the diff vector of the query keypoint locations
+    vnl_double_3 queryDiff = queryPoints[idx1] - queryPoints[idx2];
+    // Angle between the diff vector and the u unit vector
+    double theta = getAngle(vnl_double_3(1.0,0.0,0.0), queryDiff);
+    
+    // compute the diff vector of the projected train keypoint locations
+    vnl_double_3 trainDiff = projTrainPoints[idx1] - projTrainPoints[idx2];
+    
+    // rotate this around normal vector by theta
+    vnl_matrix<double> rotationMatrix = getRotationMatrix(plane, theta);
+    vnl_double_3 u_i = convertVnlMatrixToVector(rotationMatrix*convertVnlVectorToMatrix(trainDiff));
+    u_i.normalize();
+    u += u_i;
+  }
+  
+  // We figure out vx,vy,vz by computing the cross product between u and w
+  u /= iter;
+  vnl_double_3 w = plane;
+  w.normalize();
+  u.normalize();
+  vnl_double_3 v = vnl_cross_3d(u,w);
+  v.normalize();
+  
+  // Scale
+  u *= 0.10763;
+  v *= 0.10530;
+  w *= 0.10646;
+  
+  
+  vnl_double_3 trainCentroid(0,0,0);
+  vnl_double_3 queryCentroid(0,0,0);
+  for(int i=0; i<queryPoints.size(); i++) {
+    trainCentroid += projTrainPoints[i];
+    queryCentroid += queryPoints[i];
+  }
+  trainCentroid /= queryPoints.size();
+  queryCentroid /= queryPoints.size();
+  
+  // Now we still have to figure out a translation component. Calculate the centroids of query and train keypoints and make them match
+  vnl_double_3 t;
+  t[0] = trainCentroid[0] - (u[0]*queryCentroid[0] + v[0]*queryCentroid[1] + w[0]*queryCentroid[2]);
+  t[1] = trainCentroid[1] - (u[1]*queryCentroid[0] + v[1]*queryCentroid[1] + w[1]*queryCentroid[2]);
+  t[2] = trainCentroid[2] - (u[2]*queryCentroid[0] + v[2]*queryCentroid[1] + w[2]*queryCentroid[2]) - d;
+  
+  // vtkSmartPointer<vtkMatrix4x4> rotation = vtkSmartPointer<vtkMatrix4x4>::New();
+  // vtkSmartPointer<vtkMatrix4x4> scaling = vtkSmartPointer<vtkMatrix4x4>::New();
+  // vtkSmartPointer<vtkMatrix4x4> translation = vtkSmartPointer<vtkMatrix4x4>::New();
+  vtkSmartPointer<vtkMatrix4x4> estimate = vtkSmartPointer<vtkMatrix4x4>::New();
+
+  // getAxisAndRotationAngle(old_plane, plane, rotationAxis, angle);
+  //   vnl_matrix<double> vnlRotMat = getRotationMatrix(rotationAxis, angle);
+  //   vnlToVtkMatrix(vnlRotMat, rotation);
+  estimate->Identity();
+  estimate->SetElement(0,0,u[0]);
+  estimate->SetElement(1,0,u[1]);
+  estimate->SetElement(2,0,u[2]);
+  estimate->SetElement(0,1,v[0]);
+  estimate->SetElement(1,1,v[1]);
+  estimate->SetElement(2,1,v[2]);
+  estimate->SetElement(0,2,w[0]);
+  estimate->SetElement(1,2,w[1]);
+  estimate->SetElement(2,2,w[2]);
+  estimate->SetElement(0,3,t[0]);
+  estimate->SetElement(1,3,t[1]);
+  estimate->SetElement(2,3,t[2]);
+
+  
+  // scaling->Identity();
+  // scaling->SetElement(0,0,0.10763);
+  // scaling->SetElement(1,1,0.10530);
+  // scaling->SetElement(2,2,0.10646);
 
 
-  vtkSmartPointer<vtkMatrix4x4> rotation = vtkSmartPointer<vtkMatrix4x4>::New();
-  vtkSmartPointer<vtkMatrix4x4> scaling = vtkSmartPointer<vtkMatrix4x4>::New();
-  vtkSmartPointer<vtkMatrix4x4> translation = vtkSmartPointer<vtkMatrix4x4>::New();
-
-  getAxisAndRotationAngle(old_plane, plane, rotationAxis, angle);
-  vnl_matrix<double> vnlRotMat = getRotationMatrix(rotationAxis, angle);
-  vnlToVtkMatrix(vnlRotMat, rotation);
-
-  scaling->Identity();
-  scaling->SetElement(0,0,0.10763);
-  scaling->SetElement(1,1,0.10530);
-  scaling->SetElement(2,2,0.10646);
-
-  translation->Identity();
-  translation->SetElement(2,3,-d);
-
-  vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
-  transform->Concatenate(rotation);
-  transform->Concatenate(translation);
-  transform->Concatenate(scaling);
-  vtkSmartPointer<vtkMatrix4x4> estimate = transform->GetMatrix();
+  // vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+  // transform->Concatenate(rotation);
+  // transform->Concatenate(scaling);
+  // vtkSmartPointer<vtkMatrix4x4> estimate = transform->GetMatrix();
 
   // Translation ...
 
