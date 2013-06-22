@@ -578,8 +578,10 @@ void readTrainTransforms_mha(
   if(firstFrame > lastFrame)
     firstFrame = lastFrame;
   // Read & write images
+  void *ptr = NULL;
   for( int i = 0; i < iImgCount; i++ )
   {
+    fseek(infile, iImgRows*iImgCols, SEEK_CUR);
     if(i>=firstFrame && i <= lastFrame) {
       Mat mtImgNew = mtImg.clone();
       fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
@@ -587,6 +589,8 @@ void readTrainTransforms_mha(
       //imwrite( trainFilenames[i], trainImages[i] );
       //imwrite( trainFilenames[i], mtImgNew );
     }
+    else if(i>lastFrame)
+      break;
   }
   
   // Keep the transforms that are in the first-last range
@@ -3022,9 +3026,9 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
 
   vnl_double_3 trainCentroid(0,0,0);
   vnl_double_3 queryCentroid(0,0,0);
-  for(int i=0; i<queryPoints.size(); i++) {
-    trainCentroid += projTrainPoints[i];
-    queryCentroid += queryPoints[i];
+  for(int i=0; i<inliersIdx.size(); i++) {
+    trainCentroid += projTrainPoints[inliersIdx[i]];
+    queryCentroid += queryPoints[inliersIdx[i]];
   }
   trainCentroid /= queryPoints.size();
   queryCentroid /= queryPoints.size();
