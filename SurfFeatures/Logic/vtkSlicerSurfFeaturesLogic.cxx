@@ -2976,6 +2976,9 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   vnl_double_3 plane = vnl_cross_3d(trainPoints[planePointsIdx[0]]-trainPoints[planePointsIdx[1]], trainPoints[planePointsIdx[0]]-trainPoints[planePointsIdx[2]]);
   plane.normalize();
   double d = -dot_product(trainPoints[planePointsIdx[0]],plane);
+  std::ostringstream oss;
+  oss << "(a,b,c,d) = (" << plane[0] << "," << plane[1] << "," << plane[2] << "," << d << ")\n";
+  this->console->insertPlainText(oss.str().c_str());
 
   // Project the train keypoints to the computed plane
   std::vector<vnl_double_3> projTrainPoints;
@@ -2996,12 +2999,12 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
       idx2 = rand()%inliersIdx.size();
     }
     // compute the diff vector of the query keypoint locations
-    vnl_double_3 queryDiff = queryPoints[idx1] - queryPoints[idx2];
+    vnl_double_3 queryDiff = queryPoints[inliersIdx[idx1]] - queryPoints[inliersIdx[idx2]];
     // Angle between the diff vector and the u unit vector
     double theta = getAngle(vnl_double_3(1.0,0.0,0.0), queryDiff);
 
     // compute the diff vector of the projected train keypoint locations
-    vnl_double_3 trainDiff = projTrainPoints[idx1] - projTrainPoints[idx2];
+    vnl_double_3 trainDiff = projTrainPoints[inliersIdx[idx1]] - projTrainPoints[inliersIdx[idx2]];
 
     // rotate this around normal vector by theta
     vnl_matrix<double> rotationMatrix = getRotationMatrix(plane, theta);
@@ -3037,7 +3040,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   vnl_double_3 t;
   t[0] = trainCentroid[0] - (u[0]*queryCentroid[0] + v[0]*queryCentroid[1] + w[0]*queryCentroid[2]);
   t[1] = trainCentroid[1] - (u[1]*queryCentroid[0] + v[1]*queryCentroid[1] + w[1]*queryCentroid[2]);
-  t[2] = trainCentroid[2] - (u[2]*queryCentroid[0] + v[2]*queryCentroid[1] + w[2]*queryCentroid[2]) - d;
+  t[2] = trainCentroid[2] - (u[2]*queryCentroid[0] + v[2]*queryCentroid[1] + w[2]*queryCentroid[2]);
 
   // vtkSmartPointer<vtkMatrix4x4> rotation = vtkSmartPointer<vtkMatrix4x4>::New();
   // vtkSmartPointer<vtkMatrix4x4> scaling = vtkSmartPointer<vtkMatrix4x4>::New();
@@ -3594,7 +3597,7 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
   else if(points.size()<3)
     return 1;
 
-  int iIterations = 100;
+  int iIterations = 1000;
   float threshold = 1; // (mm)
   int iClose = 10; // Number of close values needed to assert model fits data well
 
@@ -3677,7 +3680,7 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
     }
   }
   std::ostringstream oss;
-  oss << "Mean distance of inliers to plane: " << bestError/inliersIdx.size() << std::endl;
+  oss << bestError/inliersIdx.size() << " mm error, " << inliersIdx.size() << " inliers."  << std::endl;
   this->console->insertPlainText(oss.str().c_str());
   return 0;
 }
