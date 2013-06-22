@@ -463,17 +463,16 @@ void readTrainFilenames( const string& filename, string& dirName, vector<string>
   file.close();
 }
 
-//
-// readTrainTransforms_mha()
-//
+
 // Read in relevant lines from mha file, used with PLUS ultrasound data
-//
 void readTrainTransforms_mha(
   const string& filename,
   string& dirName,
   vector<string>& trainFilenames,
   vector <Mat>& trainImages,
-  vector< vector<float> >& trainImageData
+  vector< vector<float> >& trainImageData,
+  int& firstFrame,
+  int& lastFrame
   )
 {
 #ifdef WIN32
@@ -570,15 +569,29 @@ void readTrainTransforms_mha(
   unsigned char *pucImgData = new unsigned char[iImgRows*iImgCols];
   Mat mtImg(iImgRows, iImgCols, CV_8UC1, pucImgData);
 
+  if(firstFrame < 0)
+    firstFrame = 0;
+  if(firstFrame >= iImgCount)
+    firstFrame = iImgCount-1;
+  if(lastFrame < 0 || lastFrame >= iImgCount)
+    lastFrame = iImgCount-1;
+  if(firstFrame > lastFrame)
+    firstFrame = lastFrame;
   // Read & write images
   for( int i = 0; i < iImgCount; i++ )
   {
-    Mat mtImgNew = mtImg.clone();
-    fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
-    trainImages.push_back( mtImgNew );
-    //imwrite( trainFilenames[i], trainImages[i] );
-    //imwrite( trainFilenames[i], mtImgNew );
+    if(i>=firstFrame && i <= lastFrame) {
+      Mat mtImgNew = mtImg.clone();
+      fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
+      trainImages.push_back( mtImgNew );
+      //imwrite( trainFilenames[i], trainImages[i] );
+      //imwrite( trainFilenames[i], mtImgNew );
+    }
   }
+  
+  // Keep the transforms that are in the first-last range
+  trainFilenames = std::vector<std::string>(trainFilenames.begin()+firstFrame, trainFilenames.begin()+lastFrame+1);
+  trainImageData = std::vector<std::vector<float> >(trainImageData.begin()+firstFrame, trainImageData.begin()+lastFrame+1);
 
   for( int i = 0; i < iImgCount; i++ )
   {
@@ -1150,11 +1163,13 @@ bool
   const string& trainFilename,
   vector <Mat>& trainImages,
   vector<string>& trainImageNames,
-  vector< vector<float> >& trainImageData
+  vector< vector<float> >& trainImageData,
+  int& firstFrame,
+  int& lastFrame
   )
 {
   string trainDirName;
-  readTrainTransforms_mha( trainFilename, trainDirName, trainImageNames, trainImages, trainImageData );
+  readTrainTransforms_mha( trainFilename, trainDirName, trainImageNames, trainImages, trainImageData, firstFrame, lastFrame);
   int readImageCount = trainImages.size();
 
   if( !readImageCount )
@@ -1172,7 +1187,8 @@ bool
 
 
 bool
-  readImageListDetectCompute(
+  
+  DetectCompute(
   const string& trainFilename,
   vector <Mat>& trainImages,
   vector<string>& trainImageNames,
@@ -1512,7 +1528,8 @@ int
   if( !pch ) return false;
   if( strstr( pch, ".mha" ) )
   {
-    if( !readImageList_mha( fileWithTrainImages, trainImages, trainImagesNames, trainImagesTransform ) )
+    int firstFrame=0, lastFrame=-1;
+    if( !readImageList_mha( fileWithTrainImages, trainImages, trainImagesNames, trainImagesTransform, firstFrame, lastFrame ) )
     {
       printf( "Error: could not read training images\n" );
       return -1;
@@ -1655,7 +1672,8 @@ int
   if( !pch ) return false;
   if( strstr( pch, ".mha" ) )
   {
-    if( !readImageList_mha( fileWithTrainImages, trainImages, trainImagesNames, trainTransforms ) )
+    int firstFrame=0, lastFrame=-1;
+    if( !readImageList_mha( fileWithTrainImages, trainImages, trainImagesNames, trainTransforms, firstFrame, lastFrame ) )
     {
       printf( "Error: could not read training images\n" );
       return -1;
@@ -3266,34 +3284,16 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
     images.clear();
     imagesNames.clear();
     imagesTransform.clear();
-    if( !readImageList_mha( file, images, imagesNames, imagesTransform ) )
+    if( !readImageList_mha( file, images, imagesNames, imagesTransform, startFrame, stopFrame) )
       return;
   }
   else
     return;
 
 
-  // Retrieve images we are interested in
-  if(startFrame < 0)
-    startFrame = images.size()-1;
-  if(stopFrame < 0)
-  {
-    stopFrame = images.size()-1;
-    this->Modified();
-  }
-  if(stopFrame >= images.size())
-  {
-    stopFrame = images.size()-1;
-    this->Modified();
-  }
-  if(startFrame>stopFrame)
-  {
-    stopFrame = startFrame;
-    this->Modified();
-  }
-  images = std::vector<cv::Mat>(images.begin()+startFrame, images.begin()+stopFrame+1);
-  imagesNames = std::vector<std::string>(imagesNames.begin()+startFrame, imagesNames.begin()+stopFrame+1);
-  imagesTransform = std::vector<std::vector<float> >(imagesTransform.begin()+startFrame, imagesTransform.begin()+stopFrame+1);
+  // Start and stop frames may have been modified
+  this->Modified();
+  
 
   // Compute keypoints and descriptors
   keypoints.clear();
