@@ -2924,6 +2924,8 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNode()
 
 void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
 {
+  std::ostringstream oss;
+  
   // Find coordinates of all keypoints matching with the current query image
   // Train points in the x,y,z patient coordinates
   std::vector<vnl_double_3> trainPoints;
@@ -2976,7 +2978,6 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   vnl_double_3 plane = vnl_cross_3d(trainPoints[planePointsIdx[0]]-trainPoints[planePointsIdx[1]], trainPoints[planePointsIdx[0]]-trainPoints[planePointsIdx[2]]);
   plane.normalize();
   double d = -dot_product(trainPoints[planePointsIdx[0]],plane);
-  std::ostringstream oss;
   oss << "(a,b,c,d) = (" << plane[0] << "," << plane[1] << "," << plane[2] << "," << d << ")\n";
   this->console->insertPlainText(oss.str().c_str());
 
@@ -2988,8 +2989,10 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   }
 
   // In this plane normal vector we got wx,wy,wz figured out. Now we want ux,uy,uz
-  int iter = projTrainPoints.size()*4<100 ? projTrainPoints.size() : 100;
+  int max_iter = 1000;
+  int iter = projTrainPoints.size()<max_iter/4 ? projTrainPoints.size()*4 : max_iter;
   vnl_double_3 u(0,0,0);
+  vnl_double_3 v(0,0,0);
   for(int i=0; i<iter; i++)
   {
     // randomly get two inliers
@@ -3002,23 +3005,35 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     vnl_double_3 queryDiff = queryPoints[inliersIdx[idx1]] - queryPoints[inliersIdx[idx2]];
     // Angle between the diff vector and the u unit vector
     double theta = getAngle(vnl_double_3(1.0,0.0,0.0), queryDiff);
-
+    double theta_v = getAngle(vnl_double_3(0.0,1.0,0.0), queryDiff);
+  
     // compute the diff vector of the projected train keypoint locations
     vnl_double_3 trainDiff = projTrainPoints[inliersIdx[idx1]] - projTrainPoints[inliersIdx[idx2]];
-
+  
     // rotate this around normal vector by theta
     vnl_matrix<double> rotationMatrix = getRotationMatrix(plane, theta);
+    vnl_matrix<double> rotationMatrix_v = getRotationMatrix(plane, theta_v);
     vnl_double_3 u_i = convertVnlMatrixToVector(rotationMatrix*convertVnlVectorToMatrix(trainDiff));
+    vnl_double_3 v_i = convertVnlMatrixToVector(rotationMatrix_v*convertVnlVectorToMatrix(trainDiff));
     u_i.normalize();
+    v_i.normalize();
+    v += v_i;
     u += u_i;
   }
+  
 
-  // We figure out vx,vy,vz by computing the cross product between u and w
+  // We figure out v computing the cross product between u and w
   u /= iter;
-  vnl_double_3 w = plane;
+  v /= iter;
+  vnl_double_3 w = vnl_cross_3d(u,v);
+  if(dot_product(plane,w)>0)
+    w=-plane;
+  else
+    w=plane;
   w.normalize();
   u.normalize();
-  vnl_double_3 v = vnl_cross_3d(u,w);
+  v.normalize();
+  v = vnl_cross_3d(u,w);
   v.normalize();
 
   // Scale
@@ -3035,6 +3050,11 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   }
   trainCentroid /= queryPoints.size();
   queryCentroid /= queryPoints.size();
+  
+  oss.clear();
+  oss << "Query centroid: (" << queryCentroid[0] << "," << queryCentroid[1] << "," << queryCentroid[2] << ")" << std::endl;
+  oss << "Train centroid: (" << trainCentroid[0] << "," << trainCentroid[1] << "," << trainCentroid[2] << ")" << std::endl;
+  this->console->insertPlainText(oss.str().c_str());
 
   // Now we still have to figure out a translation component. Calculate the centroids of query and train keypoints and make them match
   vnl_double_3 t;
