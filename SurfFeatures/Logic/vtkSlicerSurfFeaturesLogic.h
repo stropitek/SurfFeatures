@@ -191,7 +191,7 @@ private:
   clock_t lastStopWatch;
 
   // State
-  unsigned int currentImgIndex;
+  int currentImgIndex;
 
   // train images, keypoints, descriptors and matcher
   std::vector<cv::Mat> trainImages;
