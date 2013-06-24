@@ -3140,6 +3140,7 @@ void vtkSlicerSurfFeaturesLogic::setMinHessian(int minHessian)
   if(minHessian != this->minHessian){
     this->minHessian = minHessian;
     this->correspondenceProgress = 0;
+    this->Modified();
   }
 }
 
@@ -3358,15 +3359,6 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
   }
   descriptorMatcher->clear();
   descriptorMatcher->add(descriptors);
-}
-
-void vtkSlicerSurfFeaturesLogic::updateDescriptorMatcher()
-{
-  unsigned int numel = this->trainDescriptorMatcher->getTrainDescriptors().size();
-  if(this->trainDescriptors.size() != numel){
-    this->trainDescriptorMatcher->clear();
-    this->trainDescriptorMatcher->add(this->trainDescriptors);
-  }
 }
 
 void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
@@ -3751,7 +3743,11 @@ bool vtkSlicerSurfFeaturesLogic::cropRatiosValid()
 void vtkSlicerSurfFeaturesLogic::writeMatches()
 {
   const std::vector<std::vector<DMatch> >& m = this->afterHoughMatches;
-  std::ofstream ofs("C:\\Users\\DanK\\MProject\\data\\matches.txt");
+  #ifdef WIN32
+    std::ofstream ofs("C:\\Users\\DanK\\MProject\\data\\matches.txt");
+  #else
+    std::ofstream ofs("/Users/dkostro/Projects/MProject/data/US/log/matches.txt");
+  #endif
   for(int i=0; i < m.size(); i++)
   {
     int iMatches = 0;

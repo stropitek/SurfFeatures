@@ -151,7 +151,6 @@ public:
 
   // Private helpers
 private:
-  void updateDescriptorMatcher();
   void computeKeypointsAndDescriptors(const cv::Mat& data,\
                                       std::vector<cv::KeyPoint>& keypoints,\
                                       cv::Mat& descriptors);
