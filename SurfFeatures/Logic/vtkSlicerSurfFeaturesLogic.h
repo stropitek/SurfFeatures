@@ -146,6 +146,7 @@ private:
   
   // Public Interface
 public:
+  void play();
   void computeBogus();
   void computeTrain();
   void computeQuery();
@@ -250,6 +251,9 @@ private:
   int trainProgress;
   int bogusProgress;
   int correspondenceProgress;
+  
+  // ???
+  int playDirection;
 
   // Parameters
   int minHessian;

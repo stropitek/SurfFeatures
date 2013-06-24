@@ -77,6 +77,7 @@ public slots:
   void updateParameters();
 
   void onTogglePlay();
+  void onPlayImage();
   void onPlayIntervalChanged(int);
 
   void onLogMatches();

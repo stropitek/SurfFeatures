@@ -119,7 +119,7 @@ void qSlicerSurfFeaturesModuleWidget::setup()
 
   connect(d->computeCorrespondencesButton, SIGNAL(clicked()), this, SLOT(onComputeCorrespondences()));
 
-  connect(d->timer, SIGNAL(timeout()), this, SLOT(onNextImage()));
+  connect(d->timer, SIGNAL(timeout()), this, SLOT(onPlayImage()));
   connect(d->playButton, SIGNAL(clicked()), this, SLOT(onTogglePlay()));
   connect(d->playIntervalSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onPlayIntervalChanged(int)));
 
@@ -183,7 +183,7 @@ SLOTDEF_1(int,onTrainStopFrameChanged,setTrainStopFrame);
 SLOTDEF_1(int,onBogusStopFrameChanged,setBogusStopFrame);
 SLOTDEF_1(int,onQueryStopFrameChanged,setQueryStopFrame);
 
-
+SLOTDEF_0(onPlayImage, play);
 SLOTDEF_0(onComputeBogus,computeBogus);
 SLOTDEF_0(onComputeTrain,computeTrain);
 SLOTDEF_0(onComputeQuery,computeQuery);

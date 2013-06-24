@@ -2696,6 +2696,8 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->trainProgress = 0;
   this->bogusProgress = 0;
   this->correspondenceProgress = 0;
+  
+  this->playDirection = 1;
 
   // Load mask
   #ifdef WIN32
@@ -3267,6 +3269,7 @@ void vtkSlicerSurfFeaturesLogic::nextImage()
   this->currentImgIndex += 1;
   if(this->currentImgIndex >= this->queryImages.size())
     this->currentImgIndex = 0;
+  this->playDirection = 1;
   this->updateImage();
 }
 
@@ -3275,7 +3278,16 @@ void vtkSlicerSurfFeaturesLogic::previousImage()
   this->currentImgIndex -= 1;
   if(this->currentImgIndex < 0)
     this->currentImgIndex = this->queryImages.size()-1;
+  this->playDirection = -1;
   this->updateImage();
+}
+
+void vtkSlicerSurfFeaturesLogic::play()
+{
+  if(this->playDirection > 0)
+    this->nextImage();
+  else
+    this->previousImage();
 }
 
 void vtkSlicerSurfFeaturesLogic::updateImage()
