@@ -3538,8 +3538,6 @@ void vtkSlicerSurfFeaturesLogic::drawQueryMatches()
     return;
   int qidx = this->currentImgIndex;
   this->queryImageWithFeatures = this->queryImages[qidx].clone();
-  if(this->correspondenceProgress != 100)
-    return;
   int radius = 5;
   int thickness = 1;
   int brightness = 0;
@@ -3622,6 +3620,9 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
     planePointsIdx.push_back(0);
     planePointsIdx.push_back(1);
     planePointsIdx.push_back(2);
+    inliersIdx.push_back(0);
+    inliersIdx.push_back(1);
+    inliersIdx.push_back(2);
     return 0;
   }
   else if(points.size()<3)
@@ -3709,6 +3710,10 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
       inliersIdx = tmpInliers;
     }
   }
+  inliersIdx.push_back(planePointsIdx[0]);
+  inliersIdx.push_back(planePointsIdx[1]);
+  inliersIdx.push_back(planePointsIdx[2]);
+  
   std::ostringstream oss;
   oss << bestError/inliersIdx.size() << " mm error, " << inliersIdx.size() << " inliers."  << std::endl;
   this->console->insertPlainText(oss.str().c_str());
