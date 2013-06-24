@@ -259,4 +259,6 @@ void qSlicerSurfFeaturesModuleWidget::updateParameters()
   d->bogusPathLineEdit->setCurrentPath(logic->getBogusFile().c_str());
   d->trainPathLineEdit->setCurrentPath(logic->getTrainFile().c_str());
   d->queryPathLineEdit->setCurrentPath(logic->getQueryFile().c_str());
+  
+  d->minHessianSpinBox->setValue(logic->getMinHessian());
 }

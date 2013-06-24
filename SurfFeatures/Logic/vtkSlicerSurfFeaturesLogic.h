@@ -270,6 +270,7 @@ public:
   // Attribute setters and getters
   // ======================================
   void setMinHessian(int);
+  int getMinHessian();
 
   // parameter setters and getters
   GET(QTextEdit*,console,Console);

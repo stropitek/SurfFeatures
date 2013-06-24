@@ -2663,7 +2663,7 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->node = NULL;
   this->lastStopWatch = clock();
   this->initTime = clock();
-  this->minHessian = 200;
+  this->minHessian = 400;
   this->matcherType = "FlannBased";
   this->trainDescriptorMatcher = DescriptorMatcher::create(matcherType);
   this->bogusDescriptorMatcher = DescriptorMatcher::create(matcherType);
@@ -2924,6 +2924,8 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNode()
 
 void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
 {
+  if(this->correspondenceProgress != 100)
+    return;
   std::ostringstream oss;
   
   // Find coordinates of all keypoints matching with the current query image
@@ -3137,7 +3139,13 @@ void vtkSlicerSurfFeaturesLogic::setMinHessian(int minHessian)
 {
   if(minHessian != this->minHessian){
     this->minHessian = minHessian;
+    this->correspondenceProgress = 0;
   }
+}
+
+int vtkSlicerSurfFeaturesLogic::getMinHessian()
+{
+  return this->minHessian;
 }
 
 
@@ -3526,6 +3534,8 @@ cv::Mat vtkSlicerSurfFeaturesLogic::drawFeatures(const cv::Mat& img, const std::
 
 void vtkSlicerSurfFeaturesLogic::drawQueryMatches()
 {
+  if(this->queryProgress != 100)
+    return;
   int qidx = this->currentImgIndex;
   this->queryImageWithFeatures = this->queryImages[qidx].clone();
   if(this->correspondenceProgress != 100)
