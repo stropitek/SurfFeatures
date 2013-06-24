@@ -126,6 +126,7 @@ private:
   // Public Interface to visualization
 public:
   void showCurrentImage();
+  void previousImage();
   void nextImage();
   void updateQueryNode();
   void updateMatchNode();
@@ -134,6 +135,7 @@ public:
   void saveCurrentImage();
 
 private:
+  void updateImage();
   void showImage(const cv::Mat& img, const std::vector<cv::KeyPoint>& keypoints);
   void showImage(vtkMRMLNode* node);
   

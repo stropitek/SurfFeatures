@@ -112,6 +112,7 @@ void qSlicerSurfFeaturesModuleWidget::setup()
   connect(d->computeTrainButton, SIGNAL(clicked()), this, SLOT(onComputeTrain()));
   connect(d->computeQueryButton, SIGNAL(clicked()), this, SLOT(onComputeQuery()));
 
+  connect(d->previousImageButton, SIGNAL(clicked()), this, SLOT(onPreviousImage()));
   connect(d->nextImageButton, SIGNAL(clicked()), this, SLOT(onNextImage()));
   connect(d->showCurrentImageButton, SIGNAL(clicked()), this, SLOT(onShowCurrentImage())); 
   connect(d->saveImageButton, SIGNAL(clicked()), this, SLOT(onSaveCurrentImage()));
@@ -187,6 +188,7 @@ SLOTDEF_0(onComputeBogus,computeBogus);
 SLOTDEF_0(onComputeTrain,computeTrain);
 SLOTDEF_0(onComputeQuery,computeQuery);
 
+SLOTDEF_0(onPreviousImage, previousImage);
 SLOTDEF_0(onNextImage,nextImage);
 SLOTDEF_0(onShowCurrentImage,showCurrentImage);
 SLOTDEF_0(onSaveCurrentImage,saveCurrentImage);

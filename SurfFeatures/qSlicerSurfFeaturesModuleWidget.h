@@ -68,6 +68,7 @@ public slots:
   void onComputeTrain();
   void onComputeQuery();
 
+  void onPreviousImage();
   void onNextImage();
   void onShowCurrentImage();
   void onComputeCorrespondences();

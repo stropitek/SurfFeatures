@@ -3266,6 +3266,19 @@ void vtkSlicerSurfFeaturesLogic::nextImage()
   this->currentImgIndex += 1;
   if(this->currentImgIndex >= this->queryImages.size())
     this->currentImgIndex = 0;
+  this->updateImage();
+}
+
+void vtkSlicerSurfFeaturesLogic::previousImage()
+{
+  this->currentImgIndex -= 1;
+  if(this->currentImgIndex < 0)
+    this->currentImgIndex = this->queryImages.size()-1;
+  this->updateImage();
+}
+
+void vtkSlicerSurfFeaturesLogic::updateImage()
+{
   std::ostringstream oss;
   oss << "The current image index is " << this->currentImgIndex << std::endl;
   this->console->insertPlainText(oss.str().c_str());
@@ -3275,6 +3288,7 @@ void vtkSlicerSurfFeaturesLogic::nextImage()
   //this->updateMatchNode();
   this->updateMatchNodeRansac();
 }
+
 
 void vtkSlicerSurfFeaturesLogic::showCurrentImage()
 {

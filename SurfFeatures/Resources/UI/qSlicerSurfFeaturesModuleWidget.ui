@@ -583,14 +583,22 @@
        </layout>
       </item>
       <item>
-       <layout class="QFormLayout" name="formLayout"/>
-      </item>
-      <item>
-       <widget class="QPushButton" name="nextImageButton">
-        <property name="text">
-         <string>Next Image</string>
-        </property>
-       </widget>
+       <layout class="QHBoxLayout" name="horizontalLayout">
+        <item>
+         <widget class="QPushButton" name="previousImageButton">
+          <property name="text">
+           <string>Previous Image</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="nextImageButton">
+          <property name="text">
+           <string>Next Image</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
       <item>
        <widget class="QPushButton" name="showCurrentImageButton">
