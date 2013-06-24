@@ -581,8 +581,9 @@ void readTrainTransforms_mha(
   void *ptr = NULL;
   for( int i = 0; i < iImgCount; i++ )
   {
-    fseek(infile, iImgRows*iImgCols, SEEK_CUR);
-    if(i>=firstFrame && i <= lastFrame) {
+    if(i<firstFrame)
+      fseek(infile, iImgRows*iImgCols, SEEK_CUR);
+    else if(i>=firstFrame && i <= lastFrame) {
       Mat mtImgNew = mtImg.clone();
       fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
       trainImages.push_back( mtImgNew );
@@ -3361,6 +3362,7 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
   descriptorMatcher->add(descriptors);
 }
 
+
 void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
 {
   if(this->queryImages.empty() || this->bogusImages.empty() || this->trainImages.empty())
@@ -3374,6 +3376,8 @@ void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
   // Compute mask centroid
   int xcentroid, ycentroid;
   this->computeCentroid(this->croppedMask, xcentroid, ycentroid);
+  
+  // Go through query images
   for(int i=0; i<this->queryImages.size(); i++)
   {
     vector<DMatch> matches;
