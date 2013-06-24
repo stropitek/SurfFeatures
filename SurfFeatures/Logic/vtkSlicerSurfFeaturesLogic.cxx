@@ -3105,8 +3105,9 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   //this->queryTransformEstimate[this->currentImgIndex] = vtkToStdMatrix(estimate);
 
   cv::Mat& image = this->trainImageWithFeatures;
-  image = cv::Mat(this->queryImages[this->currentImgIndex].rows, this->queryImages[this->currentImgIndex].cols, CV_8U);
-  image.setTo(cv::Scalar::all(255));
+  image = this->queryImages[this->currentImgIndex].clone();
+  //image = cv::Mat(this->queryImages[this->currentImgIndex].rows, this->queryImages[this->currentImgIndex].cols, CV_8U);
+  //image.setTo(cv::Scalar::all(255));
 
   // TODO draw circles where inliners are...
 
