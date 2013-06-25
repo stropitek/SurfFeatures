@@ -3752,7 +3752,7 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
     v2.normalize();
 
     // Make sure the vectors are not colinear to avoid numerical problems
-    if(abs(dot_product(v1,v2)) > 0.999)
+    if(abs(dot_product(v1,v2)) > 0.99)
       continue;
 
     currentN = vnl_cross_3d(v1,v2);       // Because (a,b,c) is given by normal vector
