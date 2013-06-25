@@ -463,44 +463,68 @@ void readTrainFilenames( const string& filename, string& dirName, vector<string>
   file.close();
 }
 
-
-// Read in relevant lines from mha file, used with PLUS ultrasound data
-void readTrainTransforms_mha(
-  const string& filename,
-  string& dirName,
-  vector<string>& trainFilenames,
-  vector <Mat>& trainImages,
-  vector< vector<float> >& trainImageData,
-  int& firstFrame,
-  int& lastFrame
-  )
+std::string getDir(const std::string& filename)
 {
-#ifdef WIN32
+  #ifdef WIN32
   const char dlmtr = '\\';
-#else
+  #else
   const char dlmtr = '/';
-#endif
+  #endif
 
+  std::string dirName;
+  size_t pos = filename.rfind(dlmtr);
+  dirName = pos == string::npos ? "" : filename.substr(0, pos) + dlmtr;
+  return dirName;
+}
+
+int readImageDimensions_mha(const std::string& filename, int& cols, int& rows, int& count)
+{
+  ifstream file( filename.c_str() );
+  if ( !file.is_open() )
+    return 1;
+    
+  // Read until get dimensions
+  while( !file.eof() )
+  {
+    string str; getline( file, str );
+    if( str.empty() ) break;
+    char *pch = &(str[0]);
+    if( !pch )
+    {
+      return 1;
+      file.close();
+    }
+
+    if( strstr( pch, "DimSize =" ) )
+    {
+      if( sscanf( pch, "DimSize = %d %d %d", &cols, &rows, &count ) != 3 )
+      {
+        printf( "Error: could not read dimensions\n" );
+        file.close();
+        return 1;
+      }
+      file.close();
+      return 0;
+    }
+  }
+  file.close();
+  return 1;
+}
+
+void readImageTransforms_mha(const std::string& filename, std::vector<std::vector<float> >& trainTransforms, std::vector<std::string>& trainFilenames)
+{
+  std::string dirName = getDir(filename);
   trainFilenames.clear();
+  trainTransforms.clear();
+  
+  // Vector for reading in transforms
+  vector< float > vfTrans;
+  vfTrans.resize(12);
 
   ifstream file( filename.c_str() );
   if ( !file.is_open() )
     return;
 
-  size_t pos = filename.rfind(dlmtr);
-  dirName = pos == string::npos ? "" : filename.substr(0, pos) + dlmtr;
-
-  int iImgCols = -1;
-  int iImgRows = -1;
-  int iImgCount = -1;
-
-  int iCurrImage = 0;
-
-  // Vector for reading in transforms
-  vector< float > vfTrans;
-  vfTrans.resize(12);
-
-  // Read until get dimensions
   while( !file.eof() )
   {
     string str; getline( file, str );
@@ -509,14 +533,6 @@ void readTrainTransforms_mha(
     if( !pch )
       return;
 
-    if( strstr( pch, "DimSize =" ) )
-    {
-      if( sscanf( pch, "DimSize = %d %d %d", &iImgCols, &iImgRows, &iImgCount ) != 3 )
-      {
-        printf( "Error: could not read dimensions\n" );
-        return;
-      }
-    }
     if( strstr( pch, "ProbeToTrackerTransform =" )
       || strstr( pch, "UltrasoundToTrackerTransform =" ) )
     {
@@ -541,7 +557,7 @@ void readTrainTransforms_mha(
         vfTrans[j] = atof( pch );
         pch++;
       }
-      trainImageData.push_back( vfTrans );
+      trainTransforms.push_back( vfTrans );
     }
     if( strstr( pch, "ElementDataFile = LOCAL" ) )
     {
@@ -549,67 +565,85 @@ void readTrainTransforms_mha(
       break;
     }
   }
+}
 
-  int iPosition = file.tellg();
-  file.close();
-
-  FILE *infile = fopen( filename.c_str(), "rb" );
-  //fseek( infile, iPosition, SEEK_SET );
-  char buffer[400];
-  while( fgets( buffer, 400, infile ) )
-  {
-    if( strstr( buffer, "ElementDataFile = LOCAL" ) )
-    {
-      // Done reading
-      break;
-    }
-  }
-  int iPos2 = ftell( infile );
-
-  unsigned char *pucImgData = new unsigned char[iImgRows*iImgCols];
-  Mat mtImg(iImgRows, iImgCols, CV_8UC1, pucImgData);
-
-  if(firstFrame < 0)
-    firstFrame = 0;
-  if(firstFrame >= iImgCount)
-    firstFrame = iImgCount-1;
-  if(lastFrame < 0 || lastFrame >= iImgCount)
-    lastFrame = iImgCount-1;
-  if(firstFrame > lastFrame)
-    firstFrame = lastFrame;
-  // Read & write images
-  void *ptr = NULL;
-  for( int i = 0; i < iImgCount; i++ )
-  {
-    if(i<firstFrame)
-      fseek(infile, iImgRows*iImgCols, SEEK_CUR);
-    else if(i>=firstFrame && i <= lastFrame) {
-      Mat mtImgNew = mtImg.clone();
-      fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
-      trainImages.push_back( mtImgNew );
-      //imwrite( trainFilenames[i], trainImages[i] );
-      //imwrite( trainFilenames[i], mtImgNew );
-    }
-    else if(i>lastFrame)
-      break;
-  }
+void readImages_mha(const std::string& filename, std::vector<cv::Mat>& images, int& firstFrame, int& lastFrame)
+{
+  int iImgCols = -1;
+  int iImgRows = -1;
+  int iImgCount = -1;
+  if(readImageDimensions_mha(filename, iImgCols, iImgRows, iImgCount))
+    return;
   
+  FILE *infile = fopen( filename.c_str(), "rb" );
+   char buffer[400];
+   while( fgets( buffer, 400, infile ) )
+   {
+     if( strstr( buffer, "ElementDataFile = LOCAL" ) )
+     {
+       // Done reading
+       break;
+     }
+   }
+
+   unsigned char *pucImgData = new unsigned char[iImgRows*iImgCols];
+   Mat mtImg(iImgRows, iImgCols, CV_8UC1, pucImgData);
+
+   if(firstFrame < 0)
+     firstFrame = 0;
+   if(firstFrame >= iImgCount)
+     firstFrame = iImgCount-1;
+   if(lastFrame < 0 || lastFrame >= iImgCount)
+     lastFrame = iImgCount-1;
+   if(firstFrame > lastFrame)
+     firstFrame = lastFrame;
+   // Read & write images
+   void *ptr = NULL;
+   for( int i = 0; i < iImgCount; i++ )
+   {
+     if(i<firstFrame)
+       fseek(infile, iImgRows*iImgCols, SEEK_CUR);
+     else if(i>=firstFrame && i <= lastFrame) {
+       Mat mtImgNew = mtImg.clone();
+       fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
+       images.push_back( mtImgNew );
+       //imwrite( trainFilenames[i], trainImages[i] );
+       //imwrite( trainFilenames[i], mtImgNew );
+     }
+     else if(i>lastFrame)
+       break;
+   }
+   delete [] pucImgData;
+   
+   for( int i = 0; i < iImgCount; i++ )
+   {
+     //imwrite( trainFilenames[i], trainImages[i] );
+   }
+   fclose( infile );
+}
+
+// Read in relevant lines from mha file, used with PLUS ultrasound data
+void readTrainTransforms_mha(
+  const string& filename,
+  string& dirName,
+  vector<string>& trainFilenames,
+  vector <Mat>& trainImages,
+  vector< vector<float> >& trainTransforms,
+  int& firstFrame,
+  int& lastFrame
+  )
+{
+
+  dirName = getDir(filename);
+  readImageTransforms_mha(filename, trainTransforms, trainFilenames);
+  readImages_mha(filename, trainImages, firstFrame, lastFrame);
+    
   // Keep the transforms that are in the first-last range
   trainFilenames = std::vector<std::string>(trainFilenames.begin()+firstFrame, trainFilenames.begin()+lastFrame+1);
-  trainImageData = std::vector<std::vector<float> >(trainImageData.begin()+firstFrame, trainImageData.begin()+lastFrame+1);
-
-  for( int i = 0; i < iImgCount; i++ )
-  {
-    //imwrite( trainFilenames[i], trainImages[i] );
-  }
-
-
-  delete [] pucImgData;
-
-  fclose( infile );
+  trainTransforms = std::vector<std::vector<float> >(trainTransforms.begin()+firstFrame, trainTransforms.begin()+lastFrame+1);
 
   printf( "Read images: %d\n", trainImages.size() );
-  printf( "Read data  : %d\n", trainImageData.size() );
+  printf( "Read data  : %d\n", trainTransforms.size() );
   printf( "Read names : %d\n", trainFilenames.size() );
 
 }

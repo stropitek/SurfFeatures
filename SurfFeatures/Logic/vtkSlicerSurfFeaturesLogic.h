@@ -200,6 +200,7 @@ private:
   std::vector<std::vector<float> > queryTransformEstimate;
   std::vector<std::vector<cv::KeyPoint> > trainKeypoints;
   std::vector<cv::Mat> trainDescriptors;
+  std::vector<bool> trainValidity;
   cv::Ptr<cv::DescriptorMatcher> trainDescriptorMatcher;
   
 
@@ -217,6 +218,7 @@ private:
   std::vector< std::vector<float> > queryImagesTransform;
   std::vector<std::vector<cv::KeyPoint> > queryKeypoints;
   std::vector<cv::Mat> queryDescriptors;
+  std::vector<bool> queryValidity;
   cv::Ptr<cv::DescriptorMatcher> queryDescriptorMatcher;
 
   cv::Mat queryImageWithFeatures;
