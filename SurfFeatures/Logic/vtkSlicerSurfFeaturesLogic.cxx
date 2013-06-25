@@ -3006,8 +3006,9 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   }
 
   // In this plane normal vector we got wx,wy,wz figured out. Now we want ux,uy,uz
-  int max_iter = 1000;
-  int iter = projTrainPoints.size()<max_iter/4 ? projTrainPoints.size()*4 : max_iter;
+  int max_iter = 10000;
+  int mult = 20;
+  int iter = projTrainPoints.size()*mult<max_iter ? projTrainPoints.size()*mult : max_iter;
   vnl_double_3 u(0,0,0);
   vnl_double_3 v(0,0,0);
   for(int i=0; i<iter; i++)
