@@ -3738,7 +3738,8 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
       idx[1] = rand()%points.size();
       idx[2] = rand()%points.size();
     }
-
+    if((idx[0]==47 || idx[1]==47 || idx[2]==47) && (idx[0]==48 || idx[1]==48 || idx[2]==48))
+      std::cout << "hello" ;
     // Compute the plane based on these three point
     vnl_double_3 p1,p2,p3;
     p1 = points[idx[0]];
@@ -3751,6 +3752,8 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
     v1.normalize();
     v2.normalize();
 
+    if(v1.two_norm() < 0.99 || v2.two_norm() < 0.99) // can happen when v is (0,0,0)
+      continue;
     // Make sure the vectors are not colinear to avoid numerical problems
     if(abs(dot_product(v1,v2)) > 0.99)
       continue;
