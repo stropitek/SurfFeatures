@@ -511,12 +511,11 @@ int readImageDimensions_mha(const std::string& filename, int& cols, int& rows, i
   return 1;
 }
 
-void readImageTransforms_mha(const std::string& filename, std::vector<std::vector<float> >& transforms, std::vector<std::string>& filenames)
+void readImageTransforms_mha(const std::string& filename, std::vector<std::vector<float> >& transforms, std::vector<bool>& transformsValidity, std::vector<std::string>& filenames)
 {
   std::string dirName = getDir(filename);
   filenames.clear();
   transforms.clear();
-  std::vector<bool> validity;
   
   // Vector for reading in transforms
   vector< float > vfTrans;
@@ -562,9 +561,9 @@ void readImageTransforms_mha(const std::string& filename, std::vector<std::vecto
     }
     else if(strstr(pch, "UltrasoundToTrackerTransformStatus") || strstr(pch, "ProbeToTrackerTransformStatus")) {
       if(strstr(pch, "OK"))
-        validity.push_back(true);
+        transformsValidity.push_back(true);
       else if(strstr(pch, "INVALID"))
-        validity.push_back(false);
+        transformsValidity.push_back(false);
     }
     if( strstr( pch, "ElementDataFile = LOCAL" ) )
     {
@@ -624,30 +623,184 @@ void readImages_mha(const std::string& filename, std::vector<cv::Mat>& images, i
 }
 
 // Read in relevant lines from mha file, used with PLUS ultrasound data
-void readTrainTransforms_mha(
+int read_mha(
   const string& filename,
-  string& dirName,
-  vector<string>& trainFilenames,
-  vector <Mat>& trainImages,
-  vector< vector<float> >& trainTransforms,
+  vector <Mat>& images,
+  vector<string>& filenames,
+  vector< vector<float> >& transforms,
+  vector<bool>& transformsValidity,
   int& firstFrame,
   int& lastFrame
   )
 {
 
-  dirName = getDir(filename);
-  readImageTransforms_mha(filename, trainTransforms, trainFilenames);
-  readImages_mha(filename, trainImages, firstFrame, lastFrame);
+  readImageTransforms_mha(filename, transforms, transformsValidity, filenames);
+  readImages_mha(filename, images, firstFrame, lastFrame);
     
   // Keep the transforms that are in the first-last range
+  filenames = std::vector<std::string>(filenames.begin()+firstFrame, filenames.begin()+lastFrame+1);
+  transforms = std::vector<std::vector<float> >(transforms.begin()+firstFrame, transforms.begin()+lastFrame+1);
+  transformsValidity = std::vector<bool>(transformsValidity.begin()+firstFrame, transformsValidity.begin()+lastFrame+1);
+
+  std::cout << "Read images: " << images.size() << std::endl;
+  std::cout << "Read transforms: " << transforms.size() << std::endl;
+  std::cout << "Read transforms validity: " << transformsValidity.size() << std::endl;
+  std::cout << "Read names: " << filenames.size() << std::endl;
+  
+  return 0;
+
+}
+
+// Read in relevant lines from mha file, used with PLUS ultrasound data
+void readTrainTransforms_mha(
+  const string& filename,
+  string& dirName,
+  vector<string>& trainFilenames,
+  vector <Mat>& trainImages,
+  vector< vector<float> >& trainImageData,
+  int& firstFrame,
+  int& lastFrame
+  )
+{
+#ifdef WIN32
+  const char dlmtr = '\\';
+#else
+  const char dlmtr = '/';
+#endif
+
+  trainFilenames.clear();
+
+  ifstream file( filename.c_str() );
+  if ( !file.is_open() )
+    return;
+
+  size_t pos = filename.rfind(dlmtr);
+  dirName = pos == string::npos ? "" : filename.substr(0, pos) + dlmtr;
+
+  int iImgCols = -1;
+  int iImgRows = -1;
+  int iImgCount = -1;
+
+  int iCurrImage = 0;
+
+  // Vector for reading in transforms
+  vector< float > vfTrans;
+  vfTrans.resize(12);
+
+  // Read until get dimensions
+  while( !file.eof() )
+  {
+    string str; getline( file, str );
+    if( str.empty() ) break;
+    char *pch = &(str[0]);
+    if( !pch )
+      return;
+
+    if( strstr( pch, "DimSize =" ) )
+    {
+      if( sscanf( pch, "DimSize = %d %d %d", &iImgCols, &iImgRows, &iImgCount ) != 3 )
+      {
+        printf( "Error: could not read dimensions\n" );
+        return;
+      }
+    }
+    if( strstr( pch, "ProbeToTrackerTransform =" )
+      || strstr( pch, "UltrasoundToTrackerTransform =" ) )
+    {
+       // Parse name and transform
+       // Seq_Frame0000_ProbeToTrackerTransform = -0.224009 -0.529064 0.818481 212.75 0.52031 0.6452 0.559459 -14.0417 -0.824074 0.551188 0.130746 -26.1193 0 0 0 1 
+
+      char *pcName = pch;
+      char *pcTrans = strstr( pch, "=" );
+      pcTrans[-1] = 0; // End file name string pcName
+       //pcTrans++; // Increment to just after equal sign
+
+      string filename = dirName + pcName + ".png";// + pcTrans;
+      trainFilenames.push_back( filename );
+
+      char *pch = pcTrans;
+
+      for( int j =0; j < 12; j++ )
+      {
+        pch = strchr( pch + 1, ' ' );
+        if( !pch )
+          return;
+        vfTrans[j] = atof( pch );
+        pch++;
+      }
+      trainImageData.push_back( vfTrans );
+    }
+    if( strstr( pch, "ElementDataFile = LOCAL" ) )
+    {
+       // Done reading
+      break;
+    }
+  }
+
+  int iPosition = file.tellg();
+  file.close();
+
+  FILE *infile = fopen( filename.c_str(), "rb" );
+  //fseek( infile, iPosition, SEEK_SET );
+  char buffer[400];
+  while( fgets( buffer, 400, infile ) )
+  {
+    if( strstr( buffer, "ElementDataFile = LOCAL" ) )
+    {
+      // Done reading
+      break;
+    }
+  }
+  int iPos2 = ftell( infile );
+
+  unsigned char *pucImgData = new unsigned char[iImgRows*iImgCols];
+  Mat mtImg(iImgRows, iImgCols, CV_8UC1, pucImgData);
+
+  if(firstFrame < 0)
+    firstFrame = 0;
+  if(firstFrame >= iImgCount)
+    firstFrame = iImgCount-1;
+  if(lastFrame < 0 || lastFrame >= iImgCount)
+    lastFrame = iImgCount-1;
+  if(firstFrame > lastFrame)
+    firstFrame = lastFrame;
+  // Read & write images
+  void *ptr = NULL;
+  for( int i = 0; i < iImgCount; i++ )
+  {
+    if(i<firstFrame)
+      fseek(infile, iImgRows*iImgCols, SEEK_CUR);
+    else if(i>=firstFrame && i <= lastFrame) {
+      Mat mtImgNew = mtImg.clone();
+      fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
+      trainImages.push_back( mtImgNew );
+      //imwrite( trainFilenames[i], trainImages[i] );
+      //imwrite( trainFilenames[i], mtImgNew );
+    }
+    else if(i>lastFrame)
+      break;
+  }
+  
+  // Keep the transforms that are in the first-last range
   trainFilenames = std::vector<std::string>(trainFilenames.begin()+firstFrame, trainFilenames.begin()+lastFrame+1);
-  trainTransforms = std::vector<std::vector<float> >(trainTransforms.begin()+firstFrame, trainTransforms.begin()+lastFrame+1);
+  trainImageData = std::vector<std::vector<float> >(trainImageData.begin()+firstFrame, trainImageData.begin()+lastFrame+1);
+
+  for( int i = 0; i < iImgCount; i++ )
+  {
+    //imwrite( trainFilenames[i], trainImages[i] );
+  }
+
+
+  delete [] pucImgData;
+
+  fclose( infile );
 
   printf( "Read images: %d\n", trainImages.size() );
-  printf( "Read data  : %d\n", trainTransforms.size() );
+  printf( "Read data  : %d\n", trainImageData.size() );
   printf( "Read names : %d\n", trainFilenames.size() );
 
 }
+
 
 //
 // splitFile_mha()
@@ -3413,7 +3566,7 @@ void vtkSlicerSurfFeaturesLogic::computeBogus()
   this->setCorrespondenceProgress(0);
   this->setBogusProgress(0);
   this->readAndComputeFeaturesOnMhaFile(this->bogusFile, this->bogusImages, this->bogusImagesNames, \
-    this->bogusImagesTransform, this->bogusKeypoints, this->bogusDescriptors, this->bogusDescriptorMatcher, this->bogusStartFrame, this->bogusStopFrame, "bogus");
+    this->bogusImagesTransform, this->bogusTransformsValidity, this->bogusKeypoints, this->bogusDescriptors, this->bogusDescriptorMatcher, this->bogusStartFrame, this->bogusStopFrame, "bogus");
 }
 
 void vtkSlicerSurfFeaturesLogic::computeTrain()
@@ -3421,7 +3574,7 @@ void vtkSlicerSurfFeaturesLogic::computeTrain()
   this->setCorrespondenceProgress(0);
   this->setTrainProgress(0);
   this->readAndComputeFeaturesOnMhaFile(this->trainFile, this->trainImages, this->trainImagesNames, \
-    this->trainImagesTransform, this->trainKeypoints, this->trainDescriptors, this->trainDescriptorMatcher, this->trainStartFrame, this->trainStopFrame, "train");
+    this->trainImagesTransform, this->trainTransformsValidity, this->trainKeypoints, this->trainDescriptors, this->trainDescriptorMatcher, this->trainStartFrame, this->trainStopFrame, "train");
 }
 
 void vtkSlicerSurfFeaturesLogic::computeQuery()
@@ -3429,12 +3582,13 @@ void vtkSlicerSurfFeaturesLogic::computeQuery()
   this->setQueryProgress(0);
   this->setCorrespondenceProgress(0);
   this->readAndComputeFeaturesOnMhaFile(this->queryFile, this->queryImages, this->queryImagesNames, \
-    this->queryImagesTransform, this->queryKeypoints, this->queryDescriptors, this->queryDescriptorMatcher, this->queryStartFrame, this->queryStopFrame, "query");
+    this->queryImagesTransform, this->queryTransformsValidity, this->queryKeypoints, this->queryDescriptors, this->queryDescriptorMatcher, this->queryStartFrame, this->queryStopFrame, "query");
 }
 
 void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::string& file, std::vector<cv::Mat>& images,\
   std::vector<std::string>& imagesNames,\
   std::vector<std::vector<float> >& imagesTransform,\
+  std::vector<bool>& transformsValidity,\
   std::vector<std::vector<cv::KeyPoint> >& keypoints,\
   std::vector<cv::Mat>& descriptors,\
   cv::Ptr<cv::DescriptorMatcher> descriptorMatcher,\
@@ -3448,7 +3602,8 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
     images.clear();
     imagesNames.clear();
     imagesTransform.clear();
-    if( !readImageList_mha( file, images, imagesNames, imagesTransform, startFrame, stopFrame) )
+    transformsValidity.clear();
+    if( read_mha( file, images, imagesNames, imagesTransform, transformsValidity, startFrame, stopFrame) )
       return;
   }
   else
