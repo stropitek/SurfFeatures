@@ -3111,11 +3111,48 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     queryInlierPoints.push_back(vnl_tqpoint);
   }
   double meanMatchDistance = computeMeanDistance(trainInlierPoints, queryInlierPoints);
-  oss << "Mean Match Distance: " << meanMatchDistance << std::endl;
-  this->console->insertPlainText(oss.str().c_str());
-  oss.clear();
   
-
+  oss << "Mean Match Distance: " << meanMatchDistance << std::endl;
+    
+  // Compute squared distance plane to plane in roi
+  std::vector<vnl_double_3> queryPlanePoints;
+  std::vector<vnl_double_3> estimatePlanePoints;
+  int step = 4;
+  for(int i=0; i<this->croppedMask.rows; i+=step) {
+    for(int j=0; j<this->croppedMask.cols; j+=step) {
+      if(this->croppedMask.at<unsigned char>(i,j) == 0)
+        continue;
+        
+      // Find the ground truth transform
+      vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
+      transform->Identity();
+      for(int i=0; i<3; i++)
+        for(int j=0; j<4; j++)
+        transform->SetElement(i,j,this->queryImagesTransform[this->currentImgIndex][i*4+j]);
+      vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
+      combinedTransform->Concatenate(transform);
+      combinedTransform->Concatenate(this->ImageToProbeTransform);
+      vtkSmartPointer<vtkMatrix4x4> groundTruth = vtkSmartPointer<vtkMatrix4x4>::New();
+      groundTruth = combinedTransform->GetMatrix();
+      
+      // Apply transforms to current point
+      float point[4];
+      point[0] = i; point[1] = j;
+      point[2] = 0.0; point[3] = 1.0;
+      float qpoint[4];
+      float epoint[4];
+      estimate->MultiplyPoint(point, epoint);
+      groundTruth->MultiplyPoint(point, qpoint);
+      
+      // Compute distance between points
+      queryPlanePoints.push_back(vnl_double_3(qpoint[0], qpoint[1], qpoint[2]));
+      estimatePlanePoints.push_back(vnl_double_3(epoint[0], epoint[1], epoint[2]));
+    }
+  }
+  
+  double meanPlaneDistance = computeMeanDistance(queryPlanePoints, estimatePlanePoints);
+  oss << "Mean Plane Distance: " << meanPlaneDistance << std::endl;
+  this->console->insertPlainText(oss.str().c_str());
 
   // scaling->Identity();
   // scaling->SetElement(0,0,0.10763);
@@ -3740,7 +3777,7 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
       float dist = abs(dot_product(currentN,point)+currentD);
       if(dist>threshold)
       {
-        numOutliers = numOutliers+1;
+        numOutliers++;
       }
       else
       {
