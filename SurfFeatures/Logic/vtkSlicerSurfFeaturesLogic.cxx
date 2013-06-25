@@ -2626,6 +2626,20 @@ void getAxisAndRotationAngle(vnl_double_3 v, vnl_double_3 v_new, vnl_double_3& a
   angle = getAngle(v,v_new);
 }
 
+double computeMeanDistance(const std::vector<vnl_double_3>& x1, const std::vector<vnl_double_3>& x2)
+{
+  if(x1.size() != x2.size())
+    return DBL_MAX;
+  double result = 0.;
+  for(int i=0; i<x1.size(); i++)
+  {
+    vnl_double_3 diff = x1[i]-x2[i];
+    result += diff.two_norm();
+  }
+  result /= x1.size();
+  return result;
+}
+
 std::vector<float> vtkToStdMatrix(vtkMatrix4x4* matrix)
 {
   std::vector<float> result;
@@ -2983,8 +2997,6 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   vnl_double_3 plane = vnl_cross_3d(trainPoints[planePointsIdx[0]]-trainPoints[planePointsIdx[1]], trainPoints[planePointsIdx[0]]-trainPoints[planePointsIdx[2]]);
   plane.normalize();
   double d = -dot_product(trainPoints[planePointsIdx[0]],plane);
-  oss << "(a,b,c,d) = (" << plane[0] << "," << plane[1] << "," << plane[2] << "," << d << ")\n";
-  this->console->insertPlainText(oss.str().c_str());
 
   // Project the train keypoints to the computed plane
   std::vector<vnl_double_3> projTrainPoints;
@@ -3055,11 +3067,6 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   }
   trainCentroid /= queryPoints.size();
   queryCentroid /= queryPoints.size();
-  
-  oss.clear();
-  oss << "Query centroid: (" << queryCentroid[0] << "," << queryCentroid[1] << "," << queryCentroid[2] << ")" << std::endl;
-  oss << "Train centroid: (" << trainCentroid[0] << "," << trainCentroid[1] << "," << trainCentroid[2] << ")" << std::endl;
-  this->console->insertPlainText(oss.str().c_str());
 
   // Now we still have to figure out a translation component. Calculate the centroids of query and train keypoints and make them match
   vnl_double_3 t;
@@ -3088,6 +3095,26 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   estimate->SetElement(0,3,t[0]);
   estimate->SetElement(1,3,t[1]);
   estimate->SetElement(2,3,t[2]);
+  
+  // Compute squared distance error of matching keypoints
+  std::vector<vnl_double_3> trainInlierPoints;
+  std::vector<vnl_double_3> queryInlierPoints;
+  for(int i=0; i<inliersIdx.size(); i++) {
+    trainInlierPoints.push_back(trainPoints[inliersIdx[i]]);
+    float qpoint[4];
+    qpoint[0] = queryPoints[inliersIdx[i]][0];
+    qpoint[1] = queryPoints[inliersIdx[i]][1];
+    qpoint[2] = 0.0; qpoint[3] = 1.0;
+    float tqpoint[4];
+    estimate->MultiplyPoint(qpoint, tqpoint);
+    vnl_double_3  vnl_tqpoint(tqpoint[0], tqpoint[1], tqpoint[2]);
+    queryInlierPoints.push_back(vnl_tqpoint);
+  }
+  double meanMatchDistance = computeMeanDistance(trainInlierPoints, queryInlierPoints);
+  oss << "Mean Match Distance: " << meanMatchDistance << std::endl;
+  this->console->insertPlainText(oss.str().c_str());
+  oss.clear();
+  
 
 
   // scaling->Identity();
