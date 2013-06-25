@@ -511,11 +511,12 @@ int readImageDimensions_mha(const std::string& filename, int& cols, int& rows, i
   return 1;
 }
 
-void readImageTransforms_mha(const std::string& filename, std::vector<std::vector<float> >& trainTransforms, std::vector<std::string>& trainFilenames)
+void readImageTransforms_mha(const std::string& filename, std::vector<std::vector<float> >& transforms, std::vector<std::string>& filenames)
 {
   std::string dirName = getDir(filename);
-  trainFilenames.clear();
-  trainTransforms.clear();
+  filenames.clear();
+  transforms.clear();
+  std::vector<bool> validity;
   
   // Vector for reading in transforms
   vector< float > vfTrans;
@@ -545,7 +546,7 @@ void readImageTransforms_mha(const std::string& filename, std::vector<std::vecto
        //pcTrans++; // Increment to just after equal sign
 
       string filename = dirName + pcName + ".png";// + pcTrans;
-      trainFilenames.push_back( filename );
+      filenames.push_back( filename );
 
       char *pch = pcTrans;
 
@@ -557,7 +558,13 @@ void readImageTransforms_mha(const std::string& filename, std::vector<std::vecto
         vfTrans[j] = atof( pch );
         pch++;
       }
-      trainTransforms.push_back( vfTrans );
+      transforms.push_back( vfTrans );
+    }
+    else if(strstr(pch, "UltrasoundToTrackerTransformStatus") || strstr(pch, "ProbeToTrackerTransformStatus")) {
+      if(strstr(pch, "OK"))
+        validity.push_back(true);
+      else if(strstr(pch, "INVALID"))
+        validity.push_back(false);
     }
     if( strstr( pch, "ElementDataFile = LOCAL" ) )
     {
@@ -607,18 +614,12 @@ void readImages_mha(const std::string& filename, std::vector<cv::Mat>& images, i
        Mat mtImgNew = mtImg.clone();
        fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
        images.push_back( mtImgNew );
-       //imwrite( trainFilenames[i], trainImages[i] );
-       //imwrite( trainFilenames[i], mtImgNew );
      }
      else if(i>lastFrame)
        break;
    }
    delete [] pucImgData;
    
-   for( int i = 0; i < iImgCount; i++ )
-   {
-     //imwrite( trainFilenames[i], trainImages[i] );
-   }
    fclose( infile );
 }
 
