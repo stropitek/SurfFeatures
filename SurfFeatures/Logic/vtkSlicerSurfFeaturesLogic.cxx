@@ -792,9 +792,9 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
 
   // Load mask
   #ifdef WIN32
-  this->mask = cv::imread("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\mask.bmp",CV_LOAD_IMAGE_GRAYSCALE);
+  this->mask = cv::imread("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\mask.png",CV_LOAD_IMAGE_GRAYSCALE);
   #else
-  this->mask = cv::imread("/Users/dkostro/Projects/MProject/data/US/masks/mask.bmp", CV_LOAD_IMAGE_GRAYSCALE);
+  this->mask = cv::imread("/Users/dkostro/Projects/MProject/data/US/masks/mask.png", CV_LOAD_IMAGE_GRAYSCALE);
   #endif
 
   // Initialize Image to Probe transform
@@ -1772,7 +1772,7 @@ void vtkSlicerSurfFeaturesLogic::saveCurrentImage()
   if(this->queryImages.empty())
     return;
   std::string fn = this->queryImagesNames[this->currentImgIndex];
-  fn.replace(fn.end()-4,fn.end(),".bmp");
+  fn.replace(fn.end()-4,fn.end(),".png");
   cv::imwrite(std::string("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\")+fn,this->queryImages[this->currentImgIndex]);
 }
 
