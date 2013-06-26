@@ -792,7 +792,7 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
 
   // Load mask
   #ifdef WIN32
-  this->mask = cv::imread("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\mask.png",CV_LOAD_IMAGE_GRAYSCALE);
+  this->mask = cv::imread("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\mask.bmp",CV_LOAD_IMAGE_GRAYSCALE);
   #else
   this->mask = cv::imread("/Users/dkostro/Projects/MProject/data/US/masks/mask.png", CV_LOAD_IMAGE_GRAYSCALE);
   #endif
@@ -1705,6 +1705,8 @@ void vtkSlicerSurfFeaturesLogic::drawQueryMatches()
     return;
   int qidx = this->currentImgIndex;
   this->queryImageWithFeatures = this->queryImages[qidx].clone();
+  if(this->correspondenceProgress != 100)
+    return;
   int radius = 5;
   int thickness = 1;
   int brightness = 0;
