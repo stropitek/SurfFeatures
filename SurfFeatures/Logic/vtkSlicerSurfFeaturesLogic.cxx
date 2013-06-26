@@ -789,12 +789,13 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->correspondenceProgress = 0;
   
   this->playDirection = 1;
+  this->who = "none";
 
   // Load mask
   #ifdef WIN32
   this->mask = cv::imread("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\mask.bmp",CV_LOAD_IMAGE_GRAYSCALE);
   #else
-  this->mask = cv::imread("/Users/dkostro/Projects/MProject/data/US/masks/mask.png", CV_LOAD_IMAGE_GRAYSCALE);
+  this->mask = cv::imread("/Users/dkostro/Projects/MProject/data/US/masks/mask.bmp", CV_LOAD_IMAGE_GRAYSCALE);
   #endif
 
   // Initialize Image to Probe transform
@@ -1497,42 +1498,88 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
   }
   else
     return;
-
+    
+  // Compute keypoints and descriptors
+  keypoints.clear();
+  descriptors.clear();
 
   // Start and stop frames may have been modified
   this->Modified();
   
 
-  // Compute keypoints and descriptors
-  keypoints.clear();
-  descriptors.clear();
-  // Store an original image
-  if(images.size() > 0)
-    this->firstImage = images[0].clone();
-
   // Crop the mask
   this->croppedMask = this->mask.clone();
   cropData(this->croppedMask);
-
+  
   for(int i=0; i<images.size(); i++)
   {
     cropData(images[i]);
-    keypoints.push_back(vector<KeyPoint>());
-    descriptors.push_back(Mat());
-    this->computeKeypointsAndDescriptors(images[i], keypoints[i], descriptors[i]);
-    // Update progress
-    int progress = ((i+1)*100)/images.size();
-    if(who=="bogus")
-      this->setBogusProgress(progress);
-    else if(who=="query")
-      this->setQueryProgress(progress);
-    else
-      this->setTrainProgress(progress);
   }
-  descriptorMatcher->clear();
-  descriptorMatcher->add(descriptors);
+
+  // for(int i=0; i<images.size(); i++)
+  // {
+  //   cropData(images[i]);
+  //   keypoints.push_back(vector<KeyPoint>());
+  //   descriptors.push_back(Mat());
+  //   this->computeKeypointsAndDescriptors(images[i], keypoints[i], descriptors[i]);
+  //   // Update progress
+  //   int progress = ((i+1)*100)/images.size();
+  //   if(who=="bogus")
+  //     this->setBogusProgress(progress);
+  //   else if(who=="query")
+  //     this->setQueryProgress(progress);
+  //   else
+  //     this->setTrainProgress(progress);
+  // }
+  // descriptorMatcher->clear();
+  // descriptorMatcher->add(descriptors);
 }
 
+bool vtkSlicerSurfFeaturesLogic::isQueryLoading()
+{
+  return (this->queryImages.size() != this->queryKeypoints.size());
+}
+
+bool vtkSlicerSurfFeaturesLogic::isTrainLoading()
+{
+  return (this->trainImages.size() != this->trainKeypoints.size());
+}
+
+bool vtkSlicerSurfFeaturesLogic::isBogusLoading()
+{
+  return (this->bogusImages.size() != this->bogusKeypoints.size());
+}
+
+int vtkSlicerSurfFeaturesLogic::computeNext(vector<Mat>& images, vector<vector<KeyPoint> >& keypoints, vector<Mat>& descriptors, cv::Ptr<cv::DescriptorMatcher> descriptorMatcher)
+{
+  int index = keypoints.size();
+  if(index == images.size())
+    return 100;
+  keypoints.push_back(vector<KeyPoint>());
+  descriptors.push_back(Mat());
+  this->computeKeypointsAndDescriptors(images[index], keypoints[index], descriptors[index]);
+  int progress = ((index+1)*100)/images.size();
+  if(progress == 100) {
+    descriptorMatcher->clear();
+    descriptorMatcher->add(descriptors);
+  }
+  return progress;
+}
+
+void vtkSlicerSurfFeaturesLogic::computeNextQuery()
+{
+  this->setQueryProgress(this->computeNext(this->queryImages, this->queryKeypoints, this->queryDescriptors, this->queryDescriptorMatcher));
+}
+
+void vtkSlicerSurfFeaturesLogic::computeNextTrain()
+{
+  this->setTrainProgress(this->computeNext(this->trainImages, this->trainKeypoints, this->trainDescriptors, this->trainDescriptorMatcher));
+}
+
+void vtkSlicerSurfFeaturesLogic::computeNextBogus()
+{
+ this->setBogusProgress(this->computeNext(this->bogusImages, this->bogusKeypoints, this->bogusDescriptors, this->bogusDescriptorMatcher)); 
+}
 
 void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
 {

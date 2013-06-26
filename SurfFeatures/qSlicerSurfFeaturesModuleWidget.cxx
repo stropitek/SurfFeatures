@@ -38,6 +38,9 @@ class qSlicerSurfFeaturesModuleWidgetPrivate: public Ui_qSlicerSurfFeaturesModul
 protected:
   qSlicerSurfFeaturesModuleWidget* const q_ptr;
   QTimer* timer;
+  QTimer* queryTimer;
+  QTimer* trainTimer;
+  QTimer* bogusTimer;
 public:
   ~qSlicerSurfFeaturesModuleWidgetPrivate();
   qSlicerSurfFeaturesModuleWidgetPrivate(qSlicerSurfFeaturesModuleWidget& object);
@@ -52,12 +55,22 @@ public:
 qSlicerSurfFeaturesModuleWidgetPrivate::~qSlicerSurfFeaturesModuleWidgetPrivate()
 {
   delete timer;
+  delete queryTimer;
+  delete trainTimer;
+  delete bogusTimer;
 }
 
 qSlicerSurfFeaturesModuleWidgetPrivate::qSlicerSurfFeaturesModuleWidgetPrivate(qSlicerSurfFeaturesModuleWidget& object): q_ptr(&object)
 {
   timer = new QTimer;
+  queryTimer = new QTimer;
+  trainTimer = new QTimer;
+  bogusTimer = new QTimer;
+  
   timer->setInterval(100);
+  queryTimer->setInterval(0);
+  trainTimer->setInterval(0);
+  bogusTimer->setInterval(0);
 }
 
 vtkSlicerSurfFeaturesLogic* qSlicerSurfFeaturesModuleWidgetPrivate::logic() const
@@ -122,7 +135,11 @@ void qSlicerSurfFeaturesModuleWidget::setup()
   connect(d->timer, SIGNAL(timeout()), this, SLOT(onPlayImage()));
   connect(d->playButton, SIGNAL(clicked()), this, SLOT(onTogglePlay()));
   connect(d->playIntervalSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onPlayIntervalChanged(int)));
-
+  
+  connect(d->queryTimer, SIGNAL(timeout()), this, SLOT(onQueryTimer()));
+  connect(d->trainTimer, SIGNAL(timeout()), this, SLOT(onTrainTimer()));
+  connect(d->bogusTimer, SIGNAL(timeout()), this, SLOT(onBogusTimer()));
+  
   connect(d->logMatchesButton, SIGNAL(clicked()), this, SLOT(onLogMatches()));
 
 
@@ -184,9 +201,6 @@ SLOTDEF_1(int,onBogusStopFrameChanged,setBogusStopFrame);
 SLOTDEF_1(int,onQueryStopFrameChanged,setQueryStopFrame);
 
 SLOTDEF_0(onPlayImage, play);
-SLOTDEF_0(onComputeBogus,computeBogus);
-SLOTDEF_0(onComputeTrain,computeTrain);
-SLOTDEF_0(onComputeQuery,computeQuery);
 
 SLOTDEF_0(onPreviousImage, previousImage);
 SLOTDEF_0(onNextImage,nextImage);
@@ -195,6 +209,40 @@ SLOTDEF_0(onSaveCurrentImage,saveCurrentImage);
 SLOTDEF_0(onComputeCorrespondences, computeInterSliceCorrespondence);
 
 SLOTDEF_0(onLogMatches, writeMatches);
+
+SLOTDEF_0(onQueryTimer, computeNextQuery);
+SLOTDEF_0(onTrainTimer, computeNextTrain);
+SLOTDEF_0(onBogusTimer, computeNextBogus);
+
+void qSlicerSurfFeaturesModuleWidget::onComputeQuery()
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  if(d->queryTimer->isActive())
+    return;
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  logic->computeQuery();
+  d->queryTimer->start();
+}
+
+void qSlicerSurfFeaturesModuleWidget::onComputeTrain()
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  if(d->trainTimer->isActive())
+    return;
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  logic->computeTrain();
+  d->trainTimer->start();
+}
+
+void qSlicerSurfFeaturesModuleWidget::onComputeBogus()
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  if(d->bogusTimer->isActive())
+    return;
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  logic->computeBogus();
+  d->bogusTimer->start();
+}
 
 void qSlicerSurfFeaturesModuleWidget::onTogglePlay()
 {
@@ -240,6 +288,15 @@ void qSlicerSurfFeaturesModuleWidget::updateParameters()
 {
   Q_D(qSlicerSurfFeaturesModuleWidget);
   vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  
+  if(d->queryTimer->isActive() && !logic->isQueryLoading())
+    d->queryTimer->stop();
+    
+  if(d->trainTimer->isActive() && !logic->isTrainLoading())
+    d->trainTimer->stop();
+  
+  if(d->bogusTimer->isActive() && !logic->isBogusLoading())
+    d->bogusTimer->stop();
 
   d->queryFromSpinBox->setValue(logic->getQueryStartFrame());
   d->queryToSpinBox->setValue(logic->getQueryStopFrame());

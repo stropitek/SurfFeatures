@@ -150,6 +150,13 @@ public:
   void computeBogus();
   void computeTrain();
   void computeQuery();
+  int computeNext(vector<Mat>& images, vector<vector<KeyPoint> >& keypoints, vector<Mat>& descriptors, cv::Ptr<cv::DescriptorMatcher> descriptorMatcher);
+  bool isQueryLoading();
+  bool isTrainLoading();
+  bool isBogusLoading();
+  void computeNextQuery();
+  void computeNextTrain();
+  void computeNextBogus();
   void computeInterSliceCorrespondence();
 
   // Private helpers
@@ -273,6 +280,8 @@ private:
   int queryStopFrame;
   float cropRatios[4];
   vtkSmartPointer<vtkMatrix4x4> ImageToProbeTransform;
+  
+  std::string who;
 
 public:
   // ======================================

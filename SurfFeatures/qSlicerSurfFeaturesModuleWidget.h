@@ -79,6 +79,10 @@ public slots:
   void onTogglePlay();
   void onPlayImage();
   void onPlayIntervalChanged(int);
+  
+  void onQueryTimer();
+  void onTrainTimer();
+  void onBogusTimer();
 
   void onLogMatches();
 
