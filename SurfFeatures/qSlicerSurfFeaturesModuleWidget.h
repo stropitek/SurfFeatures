@@ -44,6 +44,7 @@ public:
   virtual ~qSlicerSurfFeaturesModuleWidget();
 
 public slots:
+  void onRansacMarginChanged(double);
   void onMinHessianChanged(int);
 
   void onLeftCropChanged(double);

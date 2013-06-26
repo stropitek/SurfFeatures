@@ -105,6 +105,7 @@ void qSlicerSurfFeaturesModuleWidget::setup()
   d->setupUi(this);
   this->Superclass::setup();
 
+  connect(d->ransacMarginSpinBox, SIGNAL(valueChanged(double)), this, SLOT(onRansacMarginChanged(double)));
   connect(d->minHessianSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onMinHessianChanged(int)));
 
   connect(d->leftCropSpinBox, SIGNAL(valueChanged(double)), this, SLOT(onLeftCropChanged(double)));
@@ -162,6 +163,7 @@ void qSlicerSurfFeaturesModuleWidget::setup()
 
 
 SLOTDEF_1(int,onMinHessianChanged, setMinHessian);
+SLOTDEF_1(double, onRansacMarginChanged, setRansacMargin);
 
 void qSlicerSurfFeaturesModuleWidget::onLeftCropChanged(double val)
 {

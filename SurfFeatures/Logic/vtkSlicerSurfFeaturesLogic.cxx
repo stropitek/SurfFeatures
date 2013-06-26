@@ -755,6 +755,7 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->node = NULL;
   this->lastStopWatch = clock();
   this->initTime = clock();
+  this->ransacMargin = 1.0;
   this->minHessian = 400;
   this->matcherType = "FlannBased";
   this->trainDescriptorMatcher = DescriptorMatcher::create(matcherType);
@@ -1192,6 +1193,19 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   
   oss << "Mean Match Distance: " << meanMatchDistance << std::endl;
     
+
+  // Find the ground truth transform
+  vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
+  transform->Identity();
+  for(int i=0; i<3; i++)
+    for(int j=0; j<4; j++)
+    transform->SetElement(i,j,this->queryImagesTransform[this->currentImgIndex][i*4+j]);
+  vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
+  combinedTransform->Concatenate(transform);
+  combinedTransform->Concatenate(this->ImageToProbeTransform);
+  vtkSmartPointer<vtkMatrix4x4> groundTruth = vtkSmartPointer<vtkMatrix4x4>::New();
+  groundTruth = combinedTransform->GetMatrix();
+
   // Compute squared distance plane to plane in roi
   std::vector<vnl_double_3> queryPlanePoints;
   std::vector<vnl_double_3> estimatePlanePoints;
@@ -1200,18 +1214,6 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     for(int j=0; j<this->croppedMask.cols; j+=step) {
       if(this->croppedMask.at<unsigned char>(i,j) == 0)
         continue;
-        
-      // Find the ground truth transform
-      vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
-      transform->Identity();
-      for(int i=0; i<3; i++)
-        for(int j=0; j<4; j++)
-        transform->SetElement(i,j,this->queryImagesTransform[this->currentImgIndex][i*4+j]);
-      vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
-      combinedTransform->Concatenate(transform);
-      combinedTransform->Concatenate(this->ImageToProbeTransform);
-      vtkSmartPointer<vtkMatrix4x4> groundTruth = vtkSmartPointer<vtkMatrix4x4>::New();
-      groundTruth = combinedTransform->GetMatrix();
       
       // Apply transforms to current point
       float point[4];
@@ -1851,7 +1853,7 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
     return 1;
 
   int iIterations = 1000;
-  float threshold = 1; // (mm)
+  float threshold = this->ransacMargin; // (mm)
   int iClose = 10; // Number of close values needed to assert model fits data well
 
   // current and best model parameters

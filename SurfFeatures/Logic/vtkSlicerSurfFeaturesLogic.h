@@ -272,6 +272,7 @@ private:
   int ycentroid;
 
   // Parameters
+  double ransacMargin;
   int minHessian;
   std::string matcherType;
   std::string trainFile;
@@ -291,6 +292,8 @@ public:
   // ======================================
   // Attribute setters and getters
   // ======================================
+  GETSET(double, ransacMargin, RansacMargin);
+
   void setMinHessian(int);
   int getMinHessian();
 
