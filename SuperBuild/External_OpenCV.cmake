@@ -33,9 +33,9 @@ if(NOT DEFINED OpenCV_DIR)
       -DWITH_JASPER:BOOL=OFF
       -DWITH_OPENEXR:BOOL=OFF
       -DWITH_PVAPI:BOOL=OFF
-      -DWITH_JPEG:BOOL=OFF
+      -DWITH_JPEG:BOOL=ON
       -DWITH_TIFF:BOOL=OFF
-      -DWITH_PNG:BOOL=OFF
+      -DWITH_PNG:BOOL=ON
 ## The following might cause build issues, here for testing
       -DENABLE_SSE:BOOL=ON
       -DENABLE_SSE2:BOOL=ON
