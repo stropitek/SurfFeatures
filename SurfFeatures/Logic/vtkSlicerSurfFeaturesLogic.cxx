@@ -520,6 +520,7 @@ void readImageTransforms_mha(const std::string& filename, std::vector<std::vecto
   // Vector for reading in transforms
   vector< float > vfTrans;
   vfTrans.resize(12);
+  std::string pngFilename;
 
   ifstream file( filename.c_str() );
   if ( !file.is_open() )
@@ -544,8 +545,7 @@ void readImageTransforms_mha(const std::string& filename, std::vector<std::vecto
       pcTrans[-1] = 0; // End file name string pcName
        //pcTrans++; // Increment to just after equal sign
 
-      string filename = dirName + pcName + ".png";// + pcTrans;
-      filenames.push_back( filename );
+      pngFilename = dirName + pcName + ".png";// + pcTrans;
 
       char *pch = pcTrans;
 
@@ -560,8 +560,11 @@ void readImageTransforms_mha(const std::string& filename, std::vector<std::vecto
       transforms.push_back( vfTrans );
     }
     else if(strstr(pch, "UltrasoundToTrackerTransformStatus") || strstr(pch, "ProbeToTrackerTransformStatus")) {
-      if(strstr(pch, "OK"))
+      if(strstr(pch, "OK")){
+        filenames.push_back(pngFilename);
+        transforms.push_back(vfTrans);
         transformsValidity.push_back(true);
+      }
       else if(strstr(pch, "INVALID"))
         transformsValidity.push_back(false);
     }
@@ -573,7 +576,7 @@ void readImageTransforms_mha(const std::string& filename, std::vector<std::vecto
   }
 }
 
-void readImages_mha(const std::string& filename, std::vector<cv::Mat>& images, int& firstFrame, int& lastFrame)
+void readImages_mha(const std::string& filename, std::vector<cv::Mat>& images, int& firstFrame, int& lastFrame, const std::vector<bool>& transformsValidity)
 {
   int iImgCols = -1;
   int iImgRows = -1;
@@ -609,7 +612,7 @@ void readImages_mha(const std::string& filename, std::vector<cv::Mat>& images, i
    {
      if(i<firstFrame)
        fseek(infile, iImgRows*iImgCols, SEEK_CUR);
-     else if(i>=firstFrame && i <= lastFrame) {
+     else if(i>=firstFrame && i <= lastFrame && transformsValidity[i]) {
        Mat mtImgNew = mtImg.clone();
        fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
        images.push_back( mtImgNew );
@@ -635,11 +638,20 @@ int read_mha(
 {
 
   readImageTransforms_mha(filename, transforms, transformsValidity, filenames);
-  readImages_mha(filename, images, firstFrame, lastFrame);
+  readImages_mha(filename, images, firstFrame, lastFrame, transformsValidity);
     
   // Keep the transforms that are in the first-last range
-  filenames = std::vector<std::string>(filenames.begin()+firstFrame, filenames.begin()+lastFrame+1);
-  transforms = std::vector<std::vector<float> >(transforms.begin()+firstFrame, transforms.begin()+lastFrame+1);
+  std::vector<std::vector<float> > allTransforms = transforms;
+  std::vector<std::string> allFilenames = filenames;
+  transforms.clear();
+  filenames.clear();
+  
+  for(int i=0; i<transformsValidity.size(); i++) {
+    if(i<firstFrame || i>lastFrame  || !transformsValidity[i])
+      continue;
+    transforms.push_back(allTransforms[i]);
+    filenames.push_back(allFilenames[i]);
+  }
   transformsValidity = std::vector<bool>(transformsValidity.begin()+firstFrame, transformsValidity.begin()+lastFrame+1);
 
   std::cout << "Read images: " << images.size() << std::endl;
