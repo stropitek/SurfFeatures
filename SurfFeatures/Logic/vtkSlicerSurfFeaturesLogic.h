@@ -286,7 +286,6 @@ private:
   float cropRatios[4];
   vtkSmartPointer<vtkMatrix4x4> ImageToProbeTransform;
   
-  std::string who;
 
 public:
   // ======================================

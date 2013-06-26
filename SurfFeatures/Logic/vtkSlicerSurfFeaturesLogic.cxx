@@ -789,7 +789,6 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->correspondenceProgress = 0;
   
   this->playDirection = 1;
-  this->who = "none";
 
   // Load mask
   #ifdef WIN32
@@ -1515,24 +1514,6 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
   {
     cropData(images[i]);
   }
-
-  // for(int i=0; i<images.size(); i++)
-  // {
-  //   cropData(images[i]);
-  //   keypoints.push_back(vector<KeyPoint>());
-  //   descriptors.push_back(Mat());
-  //   this->computeKeypointsAndDescriptors(images[i], keypoints[i], descriptors[i]);
-  //   // Update progress
-  //   int progress = ((i+1)*100)/images.size();
-  //   if(who=="bogus")
-  //     this->setBogusProgress(progress);
-  //   else if(who=="query")
-  //     this->setQueryProgress(progress);
-  //   else
-  //     this->setTrainProgress(progress);
-  // }
-  // descriptorMatcher->clear();
-  // descriptorMatcher->add(descriptors);
 }
 
 bool vtkSlicerSurfFeaturesLogic::isCorrespondenceComputing()
