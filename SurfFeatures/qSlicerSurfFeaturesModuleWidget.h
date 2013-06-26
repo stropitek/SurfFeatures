@@ -83,6 +83,7 @@ public slots:
   void onQueryTimer();
   void onTrainTimer();
   void onBogusTimer();
+  void onCorrespondenceTimer();
 
   void onLogMatches();
 

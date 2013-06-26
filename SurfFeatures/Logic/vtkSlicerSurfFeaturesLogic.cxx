@@ -522,11 +522,11 @@ void readImageTransforms_mha(const std::string& filename, std::vector<std::vecto
         pch++;
       }
       transforms.push_back( vfTrans );
+      filenames.push_back(pngFilename);
     }
     else if(strstr(pch, "UltrasoundToTrackerTransformStatus") || strstr(pch, "ProbeToTrackerTransformStatus")) {
+      transforms.push_back(vfTrans);
       if(strstr(pch, "OK")){
-        filenames.push_back(pngFilename);
-        transforms.push_back(vfTrans);
         transformsValidity.push_back(true);
       }
       else if(strstr(pch, "INVALID"))
@@ -1535,6 +1535,11 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
   // descriptorMatcher->add(descriptors);
 }
 
+bool vtkSlicerSurfFeaturesLogic::isCorrespondenceComputing()
+{
+  return (this->queryImages.size() != this->afterHoughMatches.size());
+}
+
 bool vtkSlicerSurfFeaturesLogic::isQueryLoading()
 {
   return (this->queryImages.size() != this->queryKeypoints.size());
@@ -1548,6 +1553,11 @@ bool vtkSlicerSurfFeaturesLogic::isTrainLoading()
 bool vtkSlicerSurfFeaturesLogic::isBogusLoading()
 {
   return (this->bogusImages.size() != this->bogusKeypoints.size());
+}
+
+bool vtkSlicerSurfFeaturesLogic::isLoading()
+{
+  return (this->isQueryLoading() || this->isBogusLoading() || this->isTrainLoading());
 }
 
 int vtkSlicerSurfFeaturesLogic::computeNext(vector<Mat>& images, vector<vector<KeyPoint> >& keypoints, vector<Mat>& descriptors, cv::Ptr<cv::DescriptorMatcher> descriptorMatcher)
@@ -1585,122 +1595,139 @@ void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
 {
   if(this->queryImages.empty() || this->bogusImages.empty() || this->trainImages.empty())
     return;
+    
+  if(this->isLoading())
+    return;
 
   this->bestMatches.clear();
   this->bestMatchesCount.clear();
   this->matchesWithBestTrainImage.clear();
   this->afterHoughMatches.clear();
-
-  // Compute mask centroid
-  int xcentroid, ycentroid;
-  this->computeCentroid(this->croppedMask, xcentroid, ycentroid);
   
-  // Go through query images
-  for(int i=0; i<this->queryImages.size(); i++)
-  {
-    vector<DMatch> matches;
-    vector<vector<DMatch> > mmatches;      // #query keypoints x #depth
-    vector<vector<DMatch> > mmatchesBogus; // #query keypoints x #depth
-    vector<int> vecImgMatches;
-    vecImgMatches.resize( this->trainKeypoints.size() );
+  // Compute mask centroid
+  this->computeCentroid(this->croppedMask, this->xcentroid, this->ycentroid);
+  
+  this->Modified();
+}
 
-    for( int j = 0; j < vecImgMatches.size(); j++ )
-      vecImgMatches[j] = 0;
+void vtkSlicerSurfFeaturesLogic::computeNextInterSliceCorrespondence()
+{
+  if(this->queryImages.empty() || this->bogusImages.empty() || this->trainImages.empty())
+    return;
+    
+  if(this->isQueryLoading() || this->isBogusLoading() || this->isTrainLoading())
+    return;
+
+  
+  // Go to next query image
+  int i = this->afterHoughMatches.size();
+  if(i == this->queryImages.size())
+    return;
+  
+  
+  vector<DMatch> matches;
+  vector<vector<DMatch> > mmatches;      // #query keypoints x #depth
+  vector<vector<DMatch> > mmatchesBogus; // #query keypoints x #depth
+  vector<int> vecImgMatches;
+  vecImgMatches.resize( this->trainKeypoints.size() );
+
+  for( int j = 0; j < vecImgMatches.size(); j++ )
+    vecImgMatches[j] = 0;
 
     // mmatches will contain the 3 closest matches to each keypoint found in the query image
-    matchDescriptorsKNN( this->queryDescriptors[i], mmatches, this->trainDescriptorMatcher, 3 );
-    matchDescriptorsKNN( this->queryDescriptors[i], mmatchesBogus, this->bogusDescriptorMatcher, 1 );
+  matchDescriptorsKNN( this->queryDescriptors[i], mmatches, this->trainDescriptorMatcher, 3 );
+  matchDescriptorsKNN( this->queryDescriptors[i], mmatchesBogus, this->bogusDescriptorMatcher, 1 );
 
     // Vector that contains the matches remaining after filtering
-    vector< DMatch > vmMatches; // #query keypoints - #filtered out
+  vector< DMatch > vmMatches; // #query keypoints - #filtered out
 
-    float fRatioThreshold = 0.95;
+  float fRatioThreshold = 0.95;
     // Disable best matches if they also have a good match with bogus data
-    for( int j = 0; j < mmatches.size(); j++ )
-    {
-      float fRatio = mmatches[j][0].distance / mmatchesBogus[j][0].distance;
+  for( int j = 0; j < mmatches.size(); j++ )
+  {
+    float fRatio = mmatches[j][0].distance / mmatchesBogus[j][0].distance;
       //float fRatio = mmatches[j][0].distance / mmatches[j][1].distance;
-      if( fRatio > fRatioThreshold )
-      {
-        mmatches[j][0].queryIdx = -1;
-        mmatches[j][0].trainIdx = -1;
-        mmatches[j][0].imgIdx = -1;
-      }
-      else
-      {
-        // Keep the filtered matches in a 1D vector
-        vmMatches.push_back( mmatches[j][0] );
-      }
+    if( fRatio > fRatioThreshold )
+    {
+      mmatches[j][0].queryIdx = -1;
+      mmatches[j][0].trainIdx = -1;
+      mmatches[j][0].imgIdx = -1;
     }
+    else
+    {
+        // Keep the filtered matches in a 1D vector
+      vmMatches.push_back( mmatches[j][0] );
+    }
+  }
     // Do the hough transform. Filters out some more matches from vmMatches.
-    int iMatchCount = houghTransform( this->queryKeypoints[i], this->trainKeypoints, vmMatches, xcentroid, ycentroid );
-    this->afterHoughMatches.push_back(vmMatches);
+  int iMatchCount = houghTransform( this->queryKeypoints[i], this->trainKeypoints, vmMatches, this->xcentroid, this->ycentroid );
+  this->afterHoughMatches.push_back(vmMatches);
 
     // Count the number of votes for each train image
-    for( int j = 0; j < vmMatches.size(); j++ )
+  for( int j = 0; j < vmMatches.size(); j++ )
+  {
+    int iImg =  vmMatches[j].imgIdx;
+    if( iImg >= 0 )
     {
-      int iImg =  vmMatches[j].imgIdx;
-      if( iImg >= 0 )
-      {
-        vecImgMatches[iImg]++;
-      }
+      vecImgMatches[iImg]++;
     }
+  }
 
-    vector< int > vecImgMatchesSmooth;
-    vecImgMatchesSmooth.resize( vecImgMatches.size(), 0 );
+  vector< int > vecImgMatchesSmooth;
+  vecImgMatchesSmooth.resize( vecImgMatches.size(), 0 );
 
-    int iMaxIndex = -1;
-    int iMaxCount = -1;
-    for( int j = 0; j < vecImgMatches.size(); j++ )
-    {
+  int iMaxIndex = -1;
+  int iMaxCount = -1;
+  for( int j = 0; j < vecImgMatches.size(); j++ )
+  {
       // Store the index and count of the training image with the most counts.
-      int iCount = vecImgMatches[j];
-      if( iCount > iMaxCount )
-      {
-        iMaxCount = iCount;
-        iMaxIndex = j;
-      }
-      // Smooth the # of matches curve by convultion with [1 1 1].
-      vecImgMatchesSmooth[j] = vecImgMatches[j];
-      if( j > 0 ) vecImgMatchesSmooth[j] += vecImgMatches[j-1];
-      if( j < vecImgMatches.size()-1 ) vecImgMatchesSmooth[j] += vecImgMatches[j+1];
+    int iCount = vecImgMatches[j];
+    if( iCount > iMaxCount )
+    {
+      iMaxCount = iCount;
+      iMaxIndex = j;
     }
+      // Smooth the # of matches curve by convultion with [1 1 1].
+    vecImgMatchesSmooth[j] = vecImgMatches[j];
+    if( j > 0 ) vecImgMatchesSmooth[j] += vecImgMatches[j-1];
+    if( j < vecImgMatches.size()-1 ) vecImgMatchesSmooth[j] += vecImgMatches[j+1];
+  }
 
     // vecImgMatches is reinitilised. It will now store flags.
-    for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
-    {
-      vecImgMatches[j] = 0;
-    }
-    for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
-    {
+  for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
+  {
+    vecImgMatches[j] = 0;
+  }
+  for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
+  {
       // If training image has more than 2 matches (after smoothing), flag the training image and its immediate neighborhood.
-      if( vecImgMatchesSmooth[j] >= 2 )
-      {
+    if( vecImgMatchesSmooth[j] >= 2 )
+    {
         // flag neighborhood
-        vecImgMatches[j] = 1;
-        if( j > 0 ) vecImgMatches[j-1]=1;
-        if( j < vecImgMatches.size()-1 ) vecImgMatches[j+1]=1;
-      }
+      vecImgMatches[j] = 1;
+      if( j > 0 ) vecImgMatches[j-1]=1;
+      if( j < vecImgMatches.size()-1 ) vecImgMatches[j+1]=1;
     }
+  }
 
     // Save all matches
-    vector< DMatch > vmMatchesSmooth;
-    vmMatchesSmooth.clear();
-    for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
-    {
+  vector< DMatch > vmMatchesSmooth;
+  vmMatchesSmooth.clear();
+  for( int j = 0; j < vecImgMatchesSmooth.size(); j++ )
+  {
       // Discard unflagged train images
-      if( vecImgMatches[j] > 0 )
+    if( vecImgMatches[j] > 0 )
+    {
+      for( int k = 0; k < vmMatches.size(); k++ )
       {
-        for( int k = 0; k < vmMatches.size(); k++ )
+        int iImg =  vmMatches[k].imgIdx;
+        if( iImg == j )
         {
-          int iImg =  vmMatches[k].imgIdx;
-          if( iImg == j )
-          {
-            vmMatchesSmooth.push_back( vmMatches[k] );
-          }
+          vmMatchesSmooth.push_back( vmMatches[k] );
         }
       }
     }
+  }
 
     // This commented part here would be I think a more efficient way for the block just above this
     //for(int k=0; k < vmMatches.size(); k++)
@@ -1711,24 +1738,22 @@ void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
     //  vmMatchesSmooth.push_back( vmMatches[k] );
     //}
 
-    vector< DMatch > matchesWithTrain;
-    for(int k=0; k<vmMatches.size(); k++)
-    {
-      if(vmMatches[k].imgIdx == iMaxIndex)
-        matchesWithTrain.push_back(vmMatches[k]);
-    }
-    this->matchesWithBestTrainImage.push_back(matchesWithTrain);
+  vector< DMatch > matchesWithTrain;
+  for(int k=0; k<vmMatches.size(); k++)
+  {
+    if(vmMatches[k].imgIdx == iMaxIndex)
+      matchesWithTrain.push_back(vmMatches[k]);
+  }
+  this->matchesWithBestTrainImage.push_back(matchesWithTrain);
 
 
     // Record closest match
-    this->bestMatches.push_back(iMaxIndex);
-    this->bestMatchesCount.push_back(iMaxCount);
+  this->bestMatches.push_back(iMaxIndex);
+  this->bestMatchesCount.push_back(iMaxCount);
 
-    int progress = ((i+1)*100)/this->queryImages.size();
-    this->setCorrespondenceProgress(progress);
-  }
+  int progress = ((i+1)*100)/this->queryImages.size();
+  this->setCorrespondenceProgress(progress);
 }
-
 
 cv::Mat vtkSlicerSurfFeaturesLogic::drawFeatures(const cv::Mat& img, const std::vector<cv::KeyPoint>& keypoints)
 {

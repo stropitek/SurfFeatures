@@ -151,13 +151,16 @@ public:
   void computeTrain();
   void computeQuery();
   int computeNext(vector<Mat>& images, vector<vector<KeyPoint> >& keypoints, vector<Mat>& descriptors, cv::Ptr<cv::DescriptorMatcher> descriptorMatcher);
+  bool isCorrespondenceComputing();
   bool isQueryLoading();
   bool isTrainLoading();
   bool isBogusLoading();
+  bool isLoading();
   void computeNextQuery();
   void computeNextTrain();
   void computeNextBogus();
   void computeInterSliceCorrespondence();
+  void computeNextInterSliceCorrespondence();
 
   // Private helpers
 private:
@@ -265,6 +268,8 @@ private:
   
   // ???
   int playDirection;
+  int xcentroid;
+  int ycentroid;
 
   // Parameters
   int minHessian;
