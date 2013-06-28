@@ -1131,10 +1131,12 @@ void writeMatlabFile(const std::vector<vnl_double_3>& trainPoints, const std::ve
   matlabof << "cornerXg = [" << vpg1[0] << " " << vpg2[0] << " " << vpg3[0] << " " << vpg4[0] << "];\n";
   matlabof << "cornerYg = [" << vpg1[1] << " " << vpg2[1] << " " << vpg3[1] << " " << vpg4[1] << "];\n";
 
-  matlabof << "ezmesh(gfunc, [min(cornerXg) max(cornerXg) min(cornerYg) max(cornerYg)],20);\n";
-  matlabof << "colormap([0,1,0]);\n";
-  matlabof << "ezmesh(efunc, [min(cornerXe) max(cornerXe) min(cornerYe) max(cornerYe)],20);\n";
-  matlabof << "colormap([1,0,0]);\n";
+  matlabof << "h(1)=ezmesh(gfunc, [min(cornerXg) max(cornerXg) min(cornerYg) max(cornerYg)],20);\n";
+  matlabof << "h(2)=ezmesh(efunc, [min(cornerXe) max(cornerXe) min(cornerYe) max(cornerYe)],20);\n";
+  matlabof << "colormap([0,1,0;1,0,0]);\n";
+
+  matlabof << "set(h(1),'CData',ones(20,20));\n";
+  matlabof << "set(h(2),'CData',2*ones(20,20));\n";
   
 }
 
@@ -1561,7 +1563,7 @@ void vtkSlicerSurfFeaturesLogic::play()
 void vtkSlicerSurfFeaturesLogic::updateImage()
 {
   std::ostringstream oss;
-  oss << "The current image index is " << this->currentImgIndex << std::endl;
+  oss << "The current image is " << this->queryImagesNames[this->currentImgIndex] << std::endl;
   this->console->insertPlainText(oss.str().c_str());
   this->drawQueryMatches();
   //this->drawBestTrainMatches();
