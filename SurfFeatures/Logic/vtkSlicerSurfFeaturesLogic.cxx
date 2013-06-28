@@ -1017,6 +1017,128 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNode()
     this->GetMRMLScene()->AddNode(this->matchNode);
 }
 
+vnl_double_3 arrayToVnlDouble(double arr[4])
+{
+  vnl_double_3 result;
+  result[0]=arr[0];
+  result[1]=arr[1];
+  result[2]=arr[2];
+  return result;
+}
+
+void vnlToArrayDouble(vnl_double_3 v, double arr[4])
+{
+  arr[0]=v[0];
+  arr[1]=v[1];
+  arr[2]=v[2];
+  arr[3]=1.0;
+}
+
+vnl_double_3 transformPoint(const vnl_double_3 in, vtkMatrix4x4* transform)
+{
+  double point[4];
+  vnlToArrayDouble(in, point);
+  double point_t[4];
+  transform->MultiplyPoint(point, point_t);
+  return arrayToVnlDouble(point_t);
+}
+
+void getPlaneFromPoints(vnl_double_3 p1, vnl_double_3 p2, vnl_double_3 p3, vnl_double_3& normal, double& d)
+{
+  vnl_double_3 v1,v2;
+    v1 = p1-p2;
+    v2 = p1-p3;
+    v1.normalize();
+    v2.normalize();
+
+    normal = vnl_cross_3d(v1,v2);       // Because (a,b,c) is given by normal vector
+    normal.normalize();
+    d = -dot_product(p1,normal);      // Because a.x1+b.x2+c.x3+d=0
+}
+
+void writeMatlabFile(const std::vector<vnl_double_3>& trainPoints, const std::vector<int>& inliersIdx,  vtkMatrix4x4* groundTruth, vtkMatrix4x4* estimate, int maxX, int maxY)
+{
+  std::ofstream matlabof("C:\\Users\\DanK\\MProject\\data\\Results\\kpdata.m");
+  std::ostringstream oss1, oss2, oss3;
+
+  for(int j=0; j<trainPoints.size(); j++)
+  {
+    if(j>0) {
+      oss1 << ","; oss2 << ","; oss3 << ",";
+    }
+    oss1 << trainPoints[j][0];
+    oss2 << trainPoints[j][1];
+    oss3 << trainPoints[j][2];
+  }
+
+  matlabof << "X=["+oss1.str()+"];\nY=["+oss2.str()+"];\nZ=["+oss3.str()+"];\n";
+
+  oss1.clear(); oss1.str("");
+  oss2.clear(); oss2.str("");
+  oss3.clear(); oss3.str("");
+
+  for(int j=0; j<inliersIdx.size(); j++)
+  {
+    if(j>0) {
+      oss1 << ","; oss2 << ","; oss3 << ",";
+    }
+    oss1 << trainPoints[inliersIdx[j]][0];
+    oss2 << trainPoints[inliersIdx[j]][1];
+    oss3 << trainPoints[inliersIdx[j]][2];
+  }
+
+  matlabof << "Xi=["+oss1.str()+"];\nYi=["+oss2.str()+"];\nZi=["+oss3.str()+"];\n";
+  matlabof << "X=setdiff(X,Xi); Y=setdiff(Y,Yi); Z=setdiff(Z,Zi);\n";
+
+
+  vnl_double_3 p1, p2, p3, p4;
+  p1[0]=0; p1[1]=0; p1[2]=0;
+  p2[0]=0; p2[1]=maxY; p3[2]=0;
+  p3[0]=maxX; p3[1]=0; p3[2]=0;
+  p4[0]=maxX; p4[1]=maxY; p4[2]=0;
+
+  vnl_double_3 vpe1 = transformPoint(p1, estimate);
+  vnl_double_3 vpe2 = transformPoint(p2, estimate);
+  vnl_double_3 vpe3 = transformPoint(p3, estimate);
+  vnl_double_3 vpe4 = transformPoint(p4, estimate);
+  vnl_double_3 vpg1 = transformPoint(p1, groundTruth);
+  vnl_double_3 vpg2 = transformPoint(p2, groundTruth);
+  vnl_double_3 vpg3 = transformPoint(p3, groundTruth);
+  vnl_double_3 vpg4 = transformPoint(p4, groundTruth);
+
+
+  vnl_double_3 normal_e;
+  double d_e;
+  vnl_double_3 normal_g;
+  double d_g;
+
+  getPlaneFromPoints(vpe1, vpe2, vpe3, normal_e, d_e);
+  getPlaneFromPoints(vpg1, vpg2, vpg3, normal_g, d_g);
+
+  double a = -normal_e[0]/normal_e[2];
+  double b = -normal_e[1]/normal_e[2];
+  double c = -d_e/normal_e[2];
+  matlabof << "efunc=@(x,y)(" << a << "*x+" << b << "*y+" << c << ");\n";
+
+  a = -normal_g[0]/normal_g[2];
+  b = -normal_g[1]/normal_g[2];
+  c = -d_g/normal_g[2];
+  matlabof << "gfunc=@(x,y)(" << a << "*x+" << b << "*y+" << c << ");\n";
+
+  matlabof << "scatter3(X,Y,Z,12,'red'); hold on; scatter3(Xi,Yi,Zi,12,'green');\n";
+ 
+  matlabof << "cornerXe = [" << vpe1[0] << " " << vpe2[0] << " " << vpe3[0] << " " << vpe4[0] << "];\n";
+  matlabof << "cornerYe = [" << vpe1[1] << " " << vpe2[1] << " " << vpe3[1] << " " << vpe4[1] << "];\n";
+  matlabof << "cornerXg = [" << vpg1[0] << " " << vpg2[0] << " " << vpg3[0] << " " << vpg4[0] << "];\n";
+  matlabof << "cornerYg = [" << vpg1[1] << " " << vpg2[1] << " " << vpg3[1] << " " << vpg4[1] << "];\n";
+
+  matlabof << "ezmesh(gfunc, [min(cornerXg) max(cornerXg) min(cornerYg) max(cornerYg)],20);\n";
+  matlabof << "colormap([0,1,0]);\n";
+  matlabof << "ezmesh(efunc, [min(cornerXe) max(cornerXe) min(cornerYe) max(cornerYe)],20);\n";
+  matlabof << "colormap([1,0,0]);\n";
+  
+}
+
 void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
 {
   if(this->correspondenceProgress != 100)
@@ -1075,6 +1197,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   vnl_double_3 plane = vnl_cross_3d(trainPoints[planePointsIdx[0]]-trainPoints[planePointsIdx[1]], trainPoints[planePointsIdx[0]]-trainPoints[planePointsIdx[2]]);
   plane.normalize();
   double d = -dot_product(trainPoints[planePointsIdx[0]],plane);
+
 
   // Project the train keypoints to the computed plane
   std::vector<vnl_double_3> projTrainPoints;
@@ -1233,6 +1356,8 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   double meanPlaneDistance = computeMeanDistance(queryPlanePoints, estimatePlanePoints);
   oss << "Mean Plane Distance: " << meanPlaneDistance << std::endl;
   this->console->insertPlainText(oss.str().c_str());
+
+  writeMatlabFile(trainPoints, inliersIdx, groundTruth, estimate, this->queryImages[this->currentImgIndex].cols, this->queryImages[this->currentImgIndex].rows);
 
   // scaling->Identity();
   // scaling->SetElement(0,0,0.10763);
@@ -1942,7 +2067,7 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
   inliersIdx.push_back(planePointsIdx[2]);
   
   std::ostringstream oss;
-  oss << bestError/inliersIdx.size() << " mm error, " << inliersIdx.size() << " inliers."  << std::endl;
+  oss << bestError/inliersIdx.size() << " mm error, " << inliersIdx.size() << " inliers, " << numOutliersBest << " outliers."  << std::endl;
   this->console->insertPlainText(oss.str().c_str());
   return 0;
 }
