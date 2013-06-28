@@ -525,7 +525,6 @@ void readImageTransforms_mha(const std::string& filename, std::vector<std::vecto
       filenames.push_back(pngFilename);
     }
     else if(strstr(pch, "UltrasoundToTrackerTransformStatus") || strstr(pch, "ProbeToTrackerTransformStatus")) {
-      transforms.push_back(vfTrans);
       if(strstr(pch, "OK")){
         transformsValidity.push_back(true);
       }
