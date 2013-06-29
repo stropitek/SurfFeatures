@@ -1097,8 +1097,8 @@ void writeMatlabFile(const std::vector<vnl_double_3>& trainPoints, const std::ve
   vnl_double_3 p1, p2, p3, p4;
   p1[0]=0; p1[1]=0; p1[2]=0;
   p2[0]=0; p2[1]=maxY; p3[2]=0;
-  p3[0]=maxX; p3[1]=0; p3[2]=0;
-  p4[0]=maxX; p4[1]=maxY; p4[2]=0;
+  p3[0]=maxX; p3[1]=maxY; p3[2]=0;
+  p4[0]=maxX; p4[1]=0; p4[2]=0;
 
   vnl_double_3 vpe1 = transformPoint(p1, estimate);
   vnl_double_3 vpe2 = transformPoint(p2, estimate);
@@ -1135,13 +1135,29 @@ void writeMatlabFile(const std::vector<vnl_double_3>& trainPoints, const std::ve
   matlabof << "cornerXg = [" << vpg1[0] << " " << vpg2[0] << " " << vpg3[0] << " " << vpg4[0] << "];\n";
   matlabof << "cornerYg = [" << vpg1[1] << " " << vpg2[1] << " " << vpg3[1] << " " << vpg4[1] << "];\n";
 
-  matlabof << "h(1)=ezmesh(gfunc, [min(cornerXg) max(cornerXg) min(cornerYg) max(cornerYg)],20);\n";
-  matlabof << "h(2)=ezmesh(efunc, [min(cornerXe) max(cornerXe) min(cornerYe) max(cornerYe)],20);\n";
-  matlabof << "colormap([0,1,0;1,0,0]);\n";
-
-  matlabof << "set(h(1),'CData',ones(20,20));\n";
-  matlabof << "set(h(2),'CData',2*ones(20,20));\n";
-  
+  matlabof << "res = 40;\n"                                                                         ;
+  matlabof << "h(1)=ezmesh(gfunc, [min(cornerXg) max(cornerXg) min(cornerYg) max(cornerYg)],res);\n";
+  matlabof << "h(2)=ezmesh(efunc, [min(cornerXe) max(cornerXe) min(cornerYe) max(cornerYe)],res);\n";
+  matlabof << "colormap([0,1,0;1,0,0]);\n"                                                          ;
+  matlabof << "set(h(1),'CData',ones(res,res));\n"                                                  ;
+  matlabof << "set(h(2),'CData',2*ones(res,res));\n"                                                ;
+  matlabof << "x=get(h(1),'XData');\n"                                                              ;
+  matlabof << "y=get(h(1),'YData');\n"                                                              ;
+  matlabof << "cornerXg = [cornerXg';cornerXg(1)];\n"                                               ;
+  matlabof << "cornerYg = [cornerYg';cornerYg(1)];\n"                                               ;
+  matlabof << "in=inpolygon(x,y,cornerXg, cornerYg);\n"                                             ;
+  matlabof << "x(~in)=NaN;\n"                                                                       ;
+  matlabof << "y(~in)=NaN;\n"                                                                       ;
+  matlabof << "set(h(1),'XData',x);\n"                                                              ;
+  matlabof << "set(h(1),'YData',y);\n"                                                              ;
+  matlabof << "x=get(h(2),'XData');\n"                                                              ;
+  matlabof << "y=get(h(2),'YData');\n"                                                              ;
+  matlabof << "cornerXe = [cornerXe';cornerXe(1)];\n"                                               ;
+  matlabof << "cornerYe = [cornerYe';cornerYe(1)];\n"                                               ;
+  matlabof << "in=inpolygon(x,y,cornerXe, cornerYe);\n"                                             ;
+  matlabof << "x(~in)=NaN; y(~in)=NaN;\n"                                                           ;
+  matlabof << "set(h(2),'XData',x);\n"                                                              ;
+  matlabof << "set(h(2),'YData',y);\n"                                                              ;
 }
 
 void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
