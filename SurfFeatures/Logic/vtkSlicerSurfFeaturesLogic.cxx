@@ -1055,7 +1055,7 @@ void getPlaneFromPoints(vnl_double_3 p1, vnl_double_3 p2, vnl_double_3 p3, vnl_d
     d = -dot_product(p1,normal);      // Because a.x1+b.x2+c.x3+d=0
 }
 
-void writeMatlabFile(const std::vector<vnl_double_3>& trainPoints, const std::vector<int>& inliersIdx,  vtkMatrix4x4* groundTruth, vtkMatrix4x4* estimate, int maxX, int maxY)
+void writeMatlabFile(const std::vector<vnl_double_3>& queryPoints, const std::vector<vnl_double_3>& trainPoints, const std::vector<int>& inliersIdx,  vtkMatrix4x4* groundTruth, vtkMatrix4x4* estimate, int maxX, int maxY)
 {
   #ifdef WIN32
     std::ofstream matlabof("C:\\Users\\DanK\\MProject\\data\\Results\\kpdata.m");
@@ -1093,6 +1093,21 @@ void writeMatlabFile(const std::vector<vnl_double_3>& trainPoints, const std::ve
   matlabof << "Xi=["+oss1.str()+"];\nYi=["+oss2.str()+"];\nZi=["+oss3.str()+"];\n";
   matlabof << "X=setdiff(X,Xi); Y=setdiff(Y,Yi); Z=setdiff(Z,Zi);\n";
 
+  oss1.clear(); oss1.str("");
+  oss2.clear(); oss2.str("");
+  oss3.clear(); oss3.str("");
+
+  for(int j=0; j<inliersIdx.size(); j++)
+  {
+    if(j>0)
+      oss1 << ","; oss2 << ","; oss3 << ",";
+    vnl_double_3 tqpoint = transformPoint(queryPoints[inliersIdx[j]], groundTruth);
+    oss1 << tqpoint[0];
+    oss2 << tqpoint[1];
+    oss3 << tqpoint[2];
+  }
+
+  matlabof << "Xq=["+oss1.str()+"];\nYq=["+oss2.str()+"];\nZq=["+oss3.str()+"];\n";
 
   vnl_double_3 p1, p2, p3, p4;
   p1[0]=0; p1[1]=0; p1[2]=0;
@@ -1128,7 +1143,7 @@ void writeMatlabFile(const std::vector<vnl_double_3>& trainPoints, const std::ve
   c = -d_g/normal_g[2];
   matlabof << "gfunc=@(x,y)(" << a << "*x+" << b << "*y+" << c << ");\n";
 
-  matlabof << "scatter3(X,Y,Z,20,'red'); hold on; scatter3(Xi,Yi,Zi,20,'green');\n";
+  matlabof << "scatter3(X,Y,Z,20,'red'); hold on; scatter3(Xi,Yi,Zi,20,'blue'); scatter3(Xq,Yq,Zq,20,'green');\n";
  
   matlabof << "cornerXe = [" << vpe1[0] << " " << vpe2[0] << " " << vpe3[0] << " " << vpe4[0] << "];\n";
   matlabof << "cornerYe = [" << vpe1[1] << " " << vpe2[1] << " " << vpe3[1] << " " << vpe4[1] << "];\n";
@@ -1378,7 +1393,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   oss << "Mean Plane Distance: " << meanPlaneDistance << std::endl;
   this->console->insertPlainText(oss.str().c_str());
 
-  writeMatlabFile(trainPoints, inliersIdx, groundTruth, estimate, this->queryImages[this->currentImgIndex].cols, this->queryImages[this->currentImgIndex].rows);
+  writeMatlabFile(queryPoints, trainPoints, inliersIdx, groundTruth, estimate, this->queryImages[this->currentImgIndex].cols, this->queryImages[this->currentImgIndex].rows);
 
   // scaling->Identity();
   // scaling->SetElement(0,0,0.10763);
