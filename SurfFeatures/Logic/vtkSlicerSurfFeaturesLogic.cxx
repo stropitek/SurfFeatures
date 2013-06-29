@@ -938,7 +938,15 @@ cv::Mat vtkSlicerSurfFeaturesLogic::convertImage(vtkImageData* image)
   return ocvImage.clone();
 }
 
-
+void getVtkMatrixFromVector(const std::vector<float>& vec, vtkMatrix4x4* vtkMatrix)
+{
+  vtkMatrix->Identity();
+  if(vec.size() < 12)
+    return;
+  for(int i=0; i<3; i++)
+    for(int j=0; j<4; j++)
+    vtkMatrix->SetElement(i,j,vec[i*4+j]);
+}
 
 void vtkSlicerSurfFeaturesLogic::updateQueryNode()
 {
@@ -946,15 +954,13 @@ void vtkSlicerSurfFeaturesLogic::updateQueryNode()
   if(this->queryProgress != 100)
     return;
   vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
-  transform->Identity();
-  for(int i=0; i<3; i++)
-    for(int j=0; j<4; j++)
-    transform->SetElement(i,j,this->queryImagesTransform[this->currentImgIndex][i*4+j]);
   vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
+  getVtkMatrixFromVector(this->queryImagesTransform[this->currentImgIndex], transform);
   combinedTransform->Concatenate(transform);
   combinedTransform->Concatenate(this->ImageToProbeTransform);
   vtkSmartPointer<vtkMatrix4x4> matrix = combinedTransform->GetMatrix();
-
+  
+  
 
   const cv::Mat& image = this->queryImageWithFeatures;
   int width = image.cols;
@@ -985,11 +991,8 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNode()
     return;
   int trainIndex = this->bestMatches[this->currentImgIndex];
   vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
-  transform->Identity();
-  for(int i=0; i<3; i++)
-    for(int j=0; j<4; j++)
-    transform->SetElement(i,j,this->trainImagesTransform[trainIndex][i*4+j]);
   vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
+  getVtkMatrixFromVector(this->trainImagesTransform[trainIndex], transform);
   combinedTransform->Concatenate(transform);
   combinedTransform->Concatenate(this->ImageToProbeTransform);
   vtkSmartPointer<vtkMatrix4x4> matrix = combinedTransform->GetMatrix();
@@ -1181,6 +1184,17 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     return;
   std::ostringstream oss;
   
+  
+  // Find the ground truth transform
+  vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
+  getVtkMatrixFromVector(this->queryImagesTransform[this->currentImgIndex], transform);
+  vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
+  combinedTransform->Concatenate(transform);
+  combinedTransform->Concatenate(this->ImageToProbeTransform);
+  vtkSmartPointer<vtkMatrix4x4> groundTruth = vtkSmartPointer<vtkMatrix4x4>::New();
+  groundTruth = combinedTransform->GetMatrix();
+  
+  
   // Find coordinates of all keypoints matching with the current query image
   // Train points in the x,y,z patient coordinates
   std::vector<vnl_double_3> trainPoints;
@@ -1193,36 +1207,30 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
       continue;
     int tIdx = this->afterHoughMatches[this->currentImgIndex][j].trainIdx;
     int qIdx = this->afterHoughMatches[this->currentImgIndex][j].queryIdx;
-
-    vnl_double_3 p;
+    
+    // Compute transform matrix for the image of this training keypoint
     vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
-    transform->Identity();
-    for(int i=0; i<3; i++)
-      for(int j=0; j<4; j++)
-      transform->SetElement(i,j,this->trainImagesTransform[imgIdx][i*4+j]);
     vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
+    getVtkMatrixFromVector(this->trainImagesTransform[imgIdx], transform);
     combinedTransform->Concatenate(transform);
     combinedTransform->Concatenate(this->ImageToProbeTransform);
     vtkSmartPointer<vtkMatrix4x4> matrix = vtkSmartPointer<vtkMatrix4x4>::New();
     matrix = combinedTransform->GetMatrix();
-    float point[4];
-    point[0] = this->trainKeypoints[imgIdx][tIdx].pt.x;
-    point[1] = this->trainKeypoints[imgIdx][tIdx].pt.y;
-    point[2] = 0.0;
-    point[3] = 1.0;
-    float tPoint[4];
-    matrix->MultiplyPoint(point,tPoint);
-    trainPoints.push_back(vnl_double_3(tPoint[0],tPoint[1],tPoint[2]));
-    queryPoints.push_back(vnl_double_3(this->queryKeypoints[this->currentImgIndex][qIdx].pt.x, this->queryKeypoints[this->currentImgIndex][qIdx].pt.y, 0.0));
+    
+    // train keypoint location before transform
+    vnl_double_3 point(this->trainKeypoints[imgIdx][tIdx].pt.x, this->trainKeypoints[imgIdx][tIdx].pt.y, 0.0);
+    trainPoints.push_back(transformPoint(point, matrix));
+    
+    // query keypoint location before transform
+    vnl_double_3 qpoint(this->queryKeypoints[this->currentImgIndex][qIdx].pt.x, this->queryKeypoints[this->currentImgIndex][qIdx].pt.y, 0.0);
+    queryPoints.push_back(qpoint);
+    
   }
 
 
-  vnl_double_3 old_plane(0.0,0.0,1.0);
-  vnl_double_3 rotationAxis;
+  // Apply ransac algorithm to estimate a plane from train matches
   std::vector<int> inliersIdx;
   std::vector<int> planePointsIdx;
-  double angle;
-
   this->ransac(trainPoints, inliersIdx, planePointsIdx);
   if(planePointsIdx.empty())
   {
@@ -1230,6 +1238,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     return;
   }
 
+  // Compute normal plane based on three selected points by ransac
   vnl_double_3 plane = vnl_cross_3d(trainPoints[planePointsIdx[0]]-trainPoints[planePointsIdx[1]], trainPoints[planePointsIdx[0]]-trainPoints[planePointsIdx[2]]);
   plane.normalize();
   double d = -dot_product(trainPoints[planePointsIdx[0]],plane);
@@ -1277,7 +1286,8 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   }
   
 
-  // We figure out v computing the cross product between u and w
+  // We figure out v computing the cross product between u and w, 
+  // v is just the cross product between u and w, but we computed v before to figure out the correct direction...
   u /= iter;
   v /= iter;
   vnl_double_3 w = vnl_cross_3d(u,v);
@@ -1312,14 +1322,8 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   t[1] = trainCentroid[1] - (u[1]*queryCentroid[0] + v[1]*queryCentroid[1] + w[1]*queryCentroid[2]);
   t[2] = trainCentroid[2] - (u[2]*queryCentroid[0] + v[2]*queryCentroid[1] + w[2]*queryCentroid[2]);
 
-  // vtkSmartPointer<vtkMatrix4x4> rotation = vtkSmartPointer<vtkMatrix4x4>::New();
-  // vtkSmartPointer<vtkMatrix4x4> scaling = vtkSmartPointer<vtkMatrix4x4>::New();
-  // vtkSmartPointer<vtkMatrix4x4> translation = vtkSmartPointer<vtkMatrix4x4>::New();
+  // Set the estimate transform matrix based on what we just calculated
   vtkSmartPointer<vtkMatrix4x4> estimate = vtkSmartPointer<vtkMatrix4x4>::New();
-
-  // getAxisAndRotationAngle(old_plane, plane, rotationAxis, angle);
-  //   vnl_matrix<double> vnlRotMat = getRotationMatrix(rotationAxis, angle);
-  //   vnlToVtkMatrix(vnlRotMat, rotation);
   estimate->Identity();
   estimate->SetElement(0,0,u[0]);
   estimate->SetElement(1,0,u[1]);
@@ -1339,33 +1343,17 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   std::vector<vnl_double_3> queryInlierPoints;
   for(int i=0; i<inliersIdx.size(); i++) {
     trainInlierPoints.push_back(trainPoints[inliersIdx[i]]);
-    float qpoint[4];
+    vnl_double_3 qpoint;
     qpoint[0] = queryPoints[inliersIdx[i]][0];
     qpoint[1] = queryPoints[inliersIdx[i]][1];
-    qpoint[2] = 0.0; qpoint[3] = 1.0;
-    float tqpoint[4];
-    estimate->MultiplyPoint(qpoint, tqpoint);
-    vnl_double_3  vnl_tqpoint(tqpoint[0], tqpoint[1], tqpoint[2]);
-    queryInlierPoints.push_back(vnl_tqpoint);
+    qpoint[2] = 0.0;
+    queryInlierPoints.push_back(transformPoint(qpoint, estimate));
   }
   double meanMatchDistance = computeMeanDistance(trainInlierPoints, queryInlierPoints);
-  
   oss << "Mean Match Distance: " << meanMatchDistance << std::endl;
-    
+  
 
-  // Find the ground truth transform
-  vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
-  transform->Identity();
-  for(int i=0; i<3; i++)
-    for(int j=0; j<4; j++)
-    transform->SetElement(i,j,this->queryImagesTransform[this->currentImgIndex][i*4+j]);
-  vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
-  combinedTransform->Concatenate(transform);
-  combinedTransform->Concatenate(this->ImageToProbeTransform);
-  vtkSmartPointer<vtkMatrix4x4> groundTruth = vtkSmartPointer<vtkMatrix4x4>::New();
-  groundTruth = combinedTransform->GetMatrix();
-
-  // Compute squared distance plane to plane in roi
+  // Compute mean plane to plane distance
   std::vector<vnl_double_3> queryPlanePoints;
   std::vector<vnl_double_3> estimatePlanePoints;
   int step = 4;
@@ -1373,48 +1361,29 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     for(int j=0; j<this->croppedMask.cols; j+=step) {
       if(this->croppedMask.at<unsigned char>(i,j) == 0)
         continue;
-      
       // Apply transforms to current point
-      float point[4];
+      vnl_double_3 point;
       point[0] = i; point[1] = j;
-      point[2] = 0.0; point[3] = 1.0;
-      float qpoint[4];
-      float epoint[4];
-      estimate->MultiplyPoint(point, epoint);
-      groundTruth->MultiplyPoint(point, qpoint);
+      point[2] = 0.0;
       
-      // Compute distance between points
-      queryPlanePoints.push_back(vnl_double_3(qpoint[0], qpoint[1], qpoint[2]));
-      estimatePlanePoints.push_back(vnl_double_3(epoint[0], epoint[1], epoint[2]));
+      // Compute locations after respective transforms are applied
+      queryPlanePoints.push_back(transformPoint(point, groundTruth));
+      estimatePlanePoints.push_back(transformPoint(point, estimate));
     }
   }
-  
   double meanPlaneDistance = computeMeanDistance(queryPlanePoints, estimatePlanePoints);
   oss << "Mean Plane Distance: " << meanPlaneDistance << std::endl;
   this->console->insertPlainText(oss.str().c_str());
 
+  // Writes a matlab file that makes a 3d plot of what's is going on
   writeMatlabFile(queryPoints, trainPoints, inliersIdx, groundTruth, estimate, this->queryImages[this->currentImgIndex].cols, this->queryImages[this->currentImgIndex].rows);
-
-  // scaling->Identity();
-  // scaling->SetElement(0,0,0.10763);
-  // scaling->SetElement(1,1,0.10530);
-  // scaling->SetElement(2,2,0.10646);
-
-
-  // vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
-  // transform->Concatenate(rotation);
-  // transform->Concatenate(scaling);
-  // vtkSmartPointer<vtkMatrix4x4> estimate = transform->GetMatrix();
-
-  // Translation ...
 
   // Store the estimate
   //this->queryTransformEstimate[this->currentImgIndex] = vtkToStdMatrix(estimate);
 
+  
   cv::Mat& image = this->trainImageWithFeatures;
   image = this->queryImages[this->currentImgIndex].clone();
-  //image = cv::Mat(this->queryImages[this->currentImgIndex].rows, this->queryImages[this->currentImgIndex].cols, CV_8U);
-  //image.setTo(cv::Scalar::all(255));
 
   // TODO draw circles where inliners are...
 
