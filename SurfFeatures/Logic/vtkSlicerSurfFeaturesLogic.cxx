@@ -1057,7 +1057,11 @@ void getPlaneFromPoints(vnl_double_3 p1, vnl_double_3 p2, vnl_double_3 p3, vnl_d
 
 void writeMatlabFile(const std::vector<vnl_double_3>& trainPoints, const std::vector<int>& inliersIdx,  vtkMatrix4x4* groundTruth, vtkMatrix4x4* estimate, int maxX, int maxY)
 {
-  std::ofstream matlabof("C:\\Users\\DanK\\MProject\\data\\Results\\kpdata.m");
+  #ifdef WIN32
+    std::ofstream matlabof("C:\\Users\\DanK\\MProject\\data\\Results\\kpdata.m");
+  #else
+    std::ofstream matlabof("/Users/dkostro/Projects/MProject/data/US/Results/kpdata.m");
+  #endif
   std::ostringstream oss1, oss2, oss3;
 
   for(int j=0; j<trainPoints.size(); j++)
@@ -1124,7 +1128,7 @@ void writeMatlabFile(const std::vector<vnl_double_3>& trainPoints, const std::ve
   c = -d_g/normal_g[2];
   matlabof << "gfunc=@(x,y)(" << a << "*x+" << b << "*y+" << c << ");\n";
 
-  matlabof << "scatter3(X,Y,Z,12,'red'); hold on; scatter3(Xi,Yi,Zi,12,'green');\n";
+  matlabof << "scatter3(X,Y,Z,20,'red'); hold on; scatter3(Xi,Yi,Zi,20,'green');\n";
  
   matlabof << "cornerXe = [" << vpe1[0] << " " << vpe2[0] << " " << vpe3[0] << " " << vpe4[0] << "];\n";
   matlabof << "cornerYe = [" << vpe1[1] << " " << vpe2[1] << " " << vpe3[1] << " " << vpe4[1] << "];\n";
