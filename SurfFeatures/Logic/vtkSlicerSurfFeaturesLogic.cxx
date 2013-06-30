@@ -742,200 +742,6 @@ void vnlToVtkMatrix(const vnl_matrix<double> vnlMatrix , vtkMatrix4x4* vtkMatrix
     for(int j=0; j<cols; j++)
       vtkMatrix->SetElement(i,j,vnlMatrix(i,j));
   }
-
-}
-
-//----------------------------------------------------------------------------
-vtkStandardNewMacro(vtkSlicerSurfFeaturesLogic);
-
-//----------------------------------------------------------------------------
-vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
-{
-  this->node = NULL;
-  this->lastStopWatch = clock();
-  this->initTime = clock();
-  this->ransacMargin = 1.0;
-  this->minHessian = 400;
-  this->matcherType = "FlannBased";
-  this->trainDescriptorMatcher = DescriptorMatcher::create(matcherType);
-  this->bogusDescriptorMatcher = DescriptorMatcher::create(matcherType);
-  this->queryDescriptorMatcher = DescriptorMatcher::create(matcherType);
-  this->cropRatios[0] = 1/5.; this->cropRatios[1]= 3./3.9;
-  this->cropRatios[2] = 1/6.; this->cropRatios[3] = 3./4.;
-
-  #ifdef WIN32
-  this->setBogusFile("C:\\Users\\DanK\\MProject\\data\\US\\Plus_test\\TrackedImageSequence_20121210_162606.mha");
-  this->setTrainFile("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha");
-  this->setQueryFile("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha");
-  #else
-  this->setBogusFile("/Users/dkostro/Projects/MProject/data/US/Plus_test/TrackedImageSequence_20121210_162606.mha");
-  this->setTrainFile("/Users/dkostro/Projects/MProject/data/US/decemberUS/TrackedImageSequence_20121211_095535.mha");
-  this->setQueryFile("/Users/dkostro/Projects/MProject/data/US/decemberUS/TrackedImageSequence_20121211_095535.mha");
-  #endif
-
-  this->bogusStartFrame = 0;
-  this->bogusStopFrame = 2;
-  this->trainStartFrame = 0;
-  this->trainStopFrame = 2;
-  this->queryStartFrame = 3;
-  this->queryStopFrame = 5;
-  this->currentImgIndex = 0;
-
-
-  // Progress is 0...
-  this->queryProgress = 0;
-  this->trainProgress = 0;
-  this->bogusProgress = 0;
-  this->correspondenceProgress = 0;
-  
-  this->playDirection = 1;
-
-  // Load mask
-  #ifdef WIN32
-  this->mask = cv::imread("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\mask.bmp",CV_LOAD_IMAGE_GRAYSCALE);
-  #else
-  this->mask = cv::imread("/Users/dkostro/Projects/MProject/data/US/masks/mask.bmp", CV_LOAD_IMAGE_GRAYSCALE);
-  #endif
-
-  // Initialize Image to Probe transform
-  this->ImageToProbeTransform = vtkSmartPointer<vtkMatrix4x4>::New();
-  this->ImageToProbeTransform->Identity();
-  this->ImageToProbeTransform->SetElement(0,0,0.107535);
-  this->ImageToProbeTransform->SetElement(0,1,0.00094824);
-  this->ImageToProbeTransform->SetElement(0,2,0.0044213);
-  this->ImageToProbeTransform->SetElement(0,3,-65.9013);
-  this->ImageToProbeTransform->SetElement(1,0,0.0044901);
-  this->ImageToProbeTransform->SetElement(1,1,-0.00238041);
-  this->ImageToProbeTransform->SetElement(1,2,-0.106347);
-  this->ImageToProbeTransform->SetElement(1,3,-3.05698);
-  this->ImageToProbeTransform->SetElement(2,0,-0.000844189);
-  this->ImageToProbeTransform->SetElement(2,1,0.105271);
-  this->ImageToProbeTransform->SetElement(2,2,-0.00244457);
-  this->ImageToProbeTransform->SetElement(2,3,-17.1613);
-
-
-  this->queryNode = vtkMRMLScalarVolumeNode::New();
-  this->queryNode->SetName("query node");
-  this->matchNode = vtkMRMLScalarVolumeNode::New();
-  this->matchNode->SetName("match node");
-
-  this->Modified();
-}
-
-void vtkSlicerSurfFeaturesLogic::setQueryProgress(int p){
-  if(p != this->queryProgress)
-  {
-    this->queryProgress = p;
-    this->Modified();
-  }
-}
-
-void vtkSlicerSurfFeaturesLogic::setTrainProgress(int p){
-  if(p != this->trainProgress)
-  {
-    this->trainProgress = p;
-    this->Modified();
-  }
-}
-
-void vtkSlicerSurfFeaturesLogic::setBogusProgress(int p){
-  if(p != this->bogusProgress)
-  {
-    this->bogusProgress = p;
-    this->Modified();
-  }
-}
-
-void vtkSlicerSurfFeaturesLogic::setCorrespondenceProgress(int p){
-  if(p != this->correspondenceProgress)
-  {
-    this->correspondenceProgress = p;
-    this->Modified();
-  }
-}
-
-//----------------------------------------------------------------------------
-vtkSlicerSurfFeaturesLogic::~vtkSlicerSurfFeaturesLogic()
-{
-}
-
-//----------------------------------------------------------------------------
-void vtkSlicerSurfFeaturesLogic::PrintSelf(ostream& os, vtkIndent indent)
-{
-  this->Superclass::PrintSelf(os, indent);
-}
-
-//---------------------------------------------------------------------------
-void vtkSlicerSurfFeaturesLogic::SetMRMLSceneInternal(vtkMRMLScene * newScene)
-{
-  vtkNew<vtkIntArray> events;
-  events->InsertNextValue(vtkMRMLScene::NodeAddedEvent);
-  events->InsertNextValue(vtkMRMLScene::NodeRemovedEvent);
-  events->InsertNextValue(vtkMRMLScene::EndBatchProcessEvent);
-  this->SetAndObserveMRMLSceneEventsInternal(newScene, events.GetPointer());
-}
-
-//-----------------------------------------------------------------------------
-void vtkSlicerSurfFeaturesLogic::RegisterNodes()
-{
-  assert(this->GetMRMLScene() != 0);
-}
-
-//---------------------------------------------------------------------------
-void vtkSlicerSurfFeaturesLogic::UpdateFromMRMLScene()
-{
-  assert(this->GetMRMLScene() != 0);
-}
-
-//---------------------------------------------------------------------------
-void vtkSlicerSurfFeaturesLogic
-  ::OnMRMLSceneNodeAdded(vtkMRMLNode* vtkNotUsed(node))
-{
-}
-
-//---------------------------------------------------------------------------
-void vtkSlicerSurfFeaturesLogic
-  ::OnMRMLSceneNodeRemoved(vtkMRMLNode* vtkNotUsed(node))
-{
-}
-
-
-vtkImageData* vtkSlicerSurfFeaturesLogic::cropData(vtkImageData* data)
-{
-  int dims[3];
-  data->GetDimensions(dims);
-  vtkSmartPointer<vtkExtractVOI> extractVOI = vtkSmartPointer<vtkExtractVOI>::New();
-  extractVOI->SetInput(data);
-  extractVOI->SetVOI(dims[0]*this->cropRatios[0],dims[0]*this->cropRatios[1],dims[1]*this->cropRatios[2],dims[1]*this->cropRatios[3], 0, 0);
-  extractVOI->SetSampleRate(1,1,1);
-  extractVOI->Update();
-  return extractVOI->GetOutput();
-}
-
-void vtkSlicerSurfFeaturesLogic::cropData(cv::Mat& img)
-{
-  cv::Size size = img.size();
-  cv::Rect roi(size.width*this->cropRatios[0], size.height*this->cropRatios[2],\
-    size.width*(this->cropRatios[1]-this->cropRatios[0]), size.height*(this->cropRatios[3]-this->cropRatios[2]));
-  // Clone the image to physically crop the image (not just jumping on same pointer)
-  img = img(roi).clone();
-}
-
-cv::Mat vtkSlicerSurfFeaturesLogic::convertImage(vtkImageData* image)
-{
-  int dims[3];
-  image->GetDimensions(dims);
-  /*vtkSmartPointer<vtkImageExport> exporter = vtkSmartPointer<vtkImageExport>::New();
-  exporter->SetInput(data);
-  int numel = dims[0]*dims[1]*dims[2];
-  void* void_ptr = malloc(numel);
-  exporter->SetExportVoidPointer(void_ptr);
-  exporter->Export();*/
-
-  // TODO: Make sure the pointer is unsigned char... or use the proper opencv type...
-    cv::Mat ocvImage(dims[1],dims[0],CV_8U ,image->GetScalarPointer());
-  // Clone the image so you don't share the pointer with vtkImageData
-  return ocvImage.clone();
 }
 
 void getVtkMatrixFromVector(const std::vector<float>& vec, vtkMatrix4x4* vtkMatrix)
@@ -946,42 +752,6 @@ void getVtkMatrixFromVector(const std::vector<float>& vec, vtkMatrix4x4* vtkMatr
   for(int i=0; i<3; i++)
     for(int j=0; j<4; j++)
     vtkMatrix->SetElement(i,j,vec[i*4+j]);
-}
-
-void vtkSlicerSurfFeaturesLogic::updateQueryNode()
-{
-  // Stop if don't have loaded any query image yet
-  if(this->queryProgress != 100)
-    return;
-  vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
-  vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
-  getVtkMatrixFromVector(this->queryImagesTransform[this->currentImgIndex], transform);
-  combinedTransform->Concatenate(transform);
-  combinedTransform->Concatenate(this->ImageToProbeTransform);
-  vtkSmartPointer<vtkMatrix4x4> matrix = combinedTransform->GetMatrix();
-  
-  
-
-  const cv::Mat& image = this->queryImageWithFeatures;
-  int width = image.cols;
-  int height = image.rows;
-  vtkSmartPointer<vtkImageImport> importer = vtkSmartPointer<vtkImageImport>::New();
-  // TODO: check type of opencv image data first...
-  importer->SetDataScalarTypeToUnsignedChar();
-  importer->SetImportVoidPointer(image.data,1); // Save argument to 1 won't destroy the pointer when importer destroyed
-  importer->SetWholeExtent(0,width-1,0, height-1, 0, 0);
-  importer->SetDataExtentToWholeExtent();
-  importer->Update();
-  // You've got to keep a reference of that vtkimage data somewhere, because the node does not make a deep copy in SetAndObserveImageData
-  this->queryImageData = importer->GetOutput();
-
-  // vtkImage shares pointer with opencv image
-  this->queryNode->SetAndObserveImageData(this->queryImageData);
-  this->queryNode->SetIJKToRASMatrix(matrix);
-
-  if(!this->GetMRMLScene()->IsNodePresent(this->queryNode))
-    this->GetMRMLScene()->AddNode(this->queryNode);
-
 }
 
 void vtkSlicerSurfFeaturesLogic::updateMatchNode()
@@ -1176,6 +946,236 @@ void writeMatlabFile(const std::vector<vnl_double_3>& queryPoints, const std::ve
   matlabof << "x(~in)=NaN; y(~in)=NaN;\n"                                                           ;
   matlabof << "set(h(2),'XData',x);\n"                                                              ;
   matlabof << "set(h(2),'YData',y);\n"                                                              ;
+}
+
+
+//----------------------------------------------------------------------------
+vtkStandardNewMacro(vtkSlicerSurfFeaturesLogic);
+
+//----------------------------------------------------------------------------
+vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
+{
+  this->node = NULL;
+  this->lastStopWatch = clock();
+  this->initTime = clock();
+  this->ransacMargin = 1.0;
+  this->minHessian = 400;
+  this->matcherType = "FlannBased";
+  this->trainDescriptorMatcher = DescriptorMatcher::create(matcherType);
+  this->bogusDescriptorMatcher = DescriptorMatcher::create(matcherType);
+  this->queryDescriptorMatcher = DescriptorMatcher::create(matcherType);
+  this->cropRatios[0] = 1/5.; this->cropRatios[1]= 3./3.9;
+  this->cropRatios[2] = 1/6.; this->cropRatios[3] = 3./4.;
+
+  #ifdef WIN32
+  this->setBogusFile("C:\\Users\\DanK\\MProject\\data\\US\\Plus_test\\TrackedImageSequence_20121210_162606.mha");
+  this->setTrainFile("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha");
+  this->setQueryFile("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha");
+  #else
+  this->setBogusFile("/Users/dkostro/Projects/MProject/data/US/Plus_test/TrackedImageSequence_20121210_162606.mha");
+  this->setTrainFile("/Users/dkostro/Projects/MProject/data/US/decemberUS/TrackedImageSequence_20121211_095535.mha");
+  this->setQueryFile("/Users/dkostro/Projects/MProject/data/US/decemberUS/TrackedImageSequence_20121211_095535.mha");
+  #endif
+
+  this->bogusStartFrame = 0;
+  this->bogusStopFrame = 2;
+  this->trainStartFrame = 0;
+  this->trainStopFrame = 2;
+  this->queryStartFrame = 3;
+  this->queryStopFrame = 5;
+  this->currentImgIndex = 0;
+
+
+  // Progress is 0...
+  this->queryProgress = 0;
+  this->trainProgress = 0;
+  this->bogusProgress = 0;
+  this->correspondenceProgress = 0;
+  
+  this->playDirection = 1;
+
+  // Load mask
+  #ifdef WIN32
+  this->mask = cv::imread("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\mask.bmp",CV_LOAD_IMAGE_GRAYSCALE);
+  #else
+  this->mask = cv::imread("/Users/dkostro/Projects/MProject/data/US/masks/mask.bmp", CV_LOAD_IMAGE_GRAYSCALE);
+  #endif
+
+  // Initialize Image to Probe transform
+  this->ImageToProbeTransform = vtkSmartPointer<vtkMatrix4x4>::New();
+  this->ImageToProbeTransform->Identity();
+  this->ImageToProbeTransform->SetElement(0,0,0.107535);
+  this->ImageToProbeTransform->SetElement(0,1,0.00094824);
+  this->ImageToProbeTransform->SetElement(0,2,0.0044213);
+  this->ImageToProbeTransform->SetElement(0,3,-65.9013);
+  this->ImageToProbeTransform->SetElement(1,0,0.0044901);
+  this->ImageToProbeTransform->SetElement(1,1,-0.00238041);
+  this->ImageToProbeTransform->SetElement(1,2,-0.106347);
+  this->ImageToProbeTransform->SetElement(1,3,-3.05698);
+  this->ImageToProbeTransform->SetElement(2,0,-0.000844189);
+  this->ImageToProbeTransform->SetElement(2,1,0.105271);
+  this->ImageToProbeTransform->SetElement(2,2,-0.00244457);
+  this->ImageToProbeTransform->SetElement(2,3,-17.1613);
+
+
+  this->queryNode = vtkMRMLScalarVolumeNode::New();
+  this->queryNode->SetName("query node");
+  this->matchNode = vtkMRMLScalarVolumeNode::New();
+  this->matchNode->SetName("match node");
+
+  this->Modified();
+}
+
+void vtkSlicerSurfFeaturesLogic::setQueryProgress(int p){
+  if(p != this->queryProgress)
+  {
+    this->queryProgress = p;
+    this->Modified();
+  }
+}
+
+void vtkSlicerSurfFeaturesLogic::setTrainProgress(int p){
+  if(p != this->trainProgress)
+  {
+    this->trainProgress = p;
+    this->Modified();
+  }
+}
+
+void vtkSlicerSurfFeaturesLogic::setBogusProgress(int p){
+  if(p != this->bogusProgress)
+  {
+    this->bogusProgress = p;
+    this->Modified();
+  }
+}
+
+void vtkSlicerSurfFeaturesLogic::setCorrespondenceProgress(int p){
+  if(p != this->correspondenceProgress)
+  {
+    this->correspondenceProgress = p;
+    this->Modified();
+  }
+}
+
+//----------------------------------------------------------------------------
+vtkSlicerSurfFeaturesLogic::~vtkSlicerSurfFeaturesLogic()
+{
+}
+
+//----------------------------------------------------------------------------
+void vtkSlicerSurfFeaturesLogic::PrintSelf(ostream& os, vtkIndent indent)
+{
+  this->Superclass::PrintSelf(os, indent);
+}
+
+//---------------------------------------------------------------------------
+void vtkSlicerSurfFeaturesLogic::SetMRMLSceneInternal(vtkMRMLScene * newScene)
+{
+  vtkNew<vtkIntArray> events;
+  events->InsertNextValue(vtkMRMLScene::NodeAddedEvent);
+  events->InsertNextValue(vtkMRMLScene::NodeRemovedEvent);
+  events->InsertNextValue(vtkMRMLScene::EndBatchProcessEvent);
+  this->SetAndObserveMRMLSceneEventsInternal(newScene, events.GetPointer());
+}
+
+//-----------------------------------------------------------------------------
+void vtkSlicerSurfFeaturesLogic::RegisterNodes()
+{
+  assert(this->GetMRMLScene() != 0);
+}
+
+//---------------------------------------------------------------------------
+void vtkSlicerSurfFeaturesLogic::UpdateFromMRMLScene()
+{
+  assert(this->GetMRMLScene() != 0);
+}
+
+//---------------------------------------------------------------------------
+void vtkSlicerSurfFeaturesLogic
+  ::OnMRMLSceneNodeAdded(vtkMRMLNode* vtkNotUsed(node))
+{
+}
+
+//---------------------------------------------------------------------------
+void vtkSlicerSurfFeaturesLogic
+  ::OnMRMLSceneNodeRemoved(vtkMRMLNode* vtkNotUsed(node))
+{
+}
+
+
+vtkImageData* vtkSlicerSurfFeaturesLogic::cropData(vtkImageData* data)
+{
+  int dims[3];
+  data->GetDimensions(dims);
+  vtkSmartPointer<vtkExtractVOI> extractVOI = vtkSmartPointer<vtkExtractVOI>::New();
+  extractVOI->SetInput(data);
+  extractVOI->SetVOI(dims[0]*this->cropRatios[0],dims[0]*this->cropRatios[1],dims[1]*this->cropRatios[2],dims[1]*this->cropRatios[3], 0, 0);
+  extractVOI->SetSampleRate(1,1,1);
+  extractVOI->Update();
+  return extractVOI->GetOutput();
+}
+
+void vtkSlicerSurfFeaturesLogic::cropData(cv::Mat& img)
+{
+  cv::Size size = img.size();
+  cv::Rect roi(size.width*this->cropRatios[0], size.height*this->cropRatios[2],\
+    size.width*(this->cropRatios[1]-this->cropRatios[0]), size.height*(this->cropRatios[3]-this->cropRatios[2]));
+  // Clone the image to physically crop the image (not just jumping on same pointer)
+  img = img(roi).clone();
+}
+
+cv::Mat vtkSlicerSurfFeaturesLogic::convertImage(vtkImageData* image)
+{
+  int dims[3];
+  image->GetDimensions(dims);
+  /*vtkSmartPointer<vtkImageExport> exporter = vtkSmartPointer<vtkImageExport>::New();
+  exporter->SetInput(data);
+  int numel = dims[0]*dims[1]*dims[2];
+  void* void_ptr = malloc(numel);
+  exporter->SetExportVoidPointer(void_ptr);
+  exporter->Export();*/
+
+  // TODO: Make sure the pointer is unsigned char... or use the proper opencv type...
+    cv::Mat ocvImage(dims[1],dims[0],CV_8U ,image->GetScalarPointer());
+  // Clone the image so you don't share the pointer with vtkImageData
+  return ocvImage.clone();
+}
+
+void vtkSlicerSurfFeaturesLogic::updateQueryNode()
+{
+  // Stop if don't have loaded any query image yet
+  if(this->queryProgress != 100)
+    return;
+  vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
+  vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
+  getVtkMatrixFromVector(this->queryImagesTransform[this->currentImgIndex], transform);
+  combinedTransform->Concatenate(transform);
+  combinedTransform->Concatenate(this->ImageToProbeTransform);
+  vtkSmartPointer<vtkMatrix4x4> matrix = combinedTransform->GetMatrix();
+  
+  
+
+  const cv::Mat& image = this->queryImageWithFeatures;
+  int width = image.cols;
+  int height = image.rows;
+  vtkSmartPointer<vtkImageImport> importer = vtkSmartPointer<vtkImageImport>::New();
+  // TODO: check type of opencv image data first...
+  importer->SetDataScalarTypeToUnsignedChar();
+  importer->SetImportVoidPointer(image.data,1); // Save argument to 1 won't destroy the pointer when importer destroyed
+  importer->SetWholeExtent(0,width-1,0, height-1, 0, 0);
+  importer->SetDataExtentToWholeExtent();
+  importer->Update();
+  // You've got to keep a reference of that vtkimage data somewhere, because the node does not make a deep copy in SetAndObserveImageData
+  this->queryImageData = importer->GetOutput();
+
+  // vtkImage shares pointer with opencv image
+  this->queryNode->SetAndObserveImageData(this->queryImageData);
+  this->queryNode->SetIJKToRASMatrix(matrix);
+
+  if(!this->GetMRMLScene()->IsNodePresent(this->queryNode))
+    this->GetMRMLScene()->AddNode(this->queryNode);
+
 }
 
 void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
