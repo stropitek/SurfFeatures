@@ -843,8 +843,9 @@ void writeMatlabFile(const std::vector<vnl_double_3>& queryPoints, const std::ve
 
   for(int j=0; j<inliersIdx.size(); j++)
   {
-    if(j>0)
+    if(j>0) {
       oss1 << ","; oss2 << ","; oss3 << ",";
+    }
     vnl_double_3 tqpoint = transformPoint(queryPoints[inliersIdx[j]], groundTruth);
     oss1 << tqpoint[0];
     oss2 << tqpoint[1];
