@@ -642,24 +642,8 @@ void matchDescriptorsKNN( const Mat& queryDescriptors, vector<vector<DMatch> >& 
 
 
 // ==============================================
-// Geometry Functions
+// Helpers - conversion functions
 // ==============================================
-vnl_matrix<double> getRotationMatrix(vnl_double_3 & axis, double theta)
-{
-  vnl_matrix<double> result(3,3);
-  result(0,0) = cos(theta)+axis[0]*axis[0]*(1-cos(theta));
-  result(0,1) = axis[0]*axis[1]*(1-cos(theta))-axis[2]*sin(theta);
-  result(0,2) = axis[0]*axis[2]*(1-cos(theta))+axis[1]*sin(theta);
-  result(1,0) = axis[1]*axis[0]*(1-cos(theta))+axis[2]*sin(theta);
-  result(1,1) = cos(theta)+axis[1]*axis[1]*(1-cos(theta));
-  result(1,2) = axis[1]*axis[2]*(1-cos(theta))-axis[0]*sin(theta);
-  result(2,0) = axis[2]*axis[0]*(1-cos(theta))-axis[1]*sin(theta);
-  result(2,1) = axis[2]*axis[1]*(1-cos(theta))+axis[0]*sin(theta);
-  result(2,2) = cos(theta)+axis[2]*axis[2]*(1-cos(theta));
-  result.normalize_columns();
-  return result;
-}
-
 vnl_matrix<double> convertVnlVectorToMatrix(const vnl_double_3& v)
 {
   vnl_matrix<double> result(3,1);
@@ -683,37 +667,21 @@ vnl_double_3 convertVnlMatrixToVector(const vnl_matrix<double>& m)
   return result;
 }
 
-vnl_double_3 projectPoint(vnl_double_3 point, vnl_double_3 normalToPlane, double offset)
+vnl_double_3 arrayToVnlDouble(double arr[4])
 {
-  normalToPlane.normalize();
-  double dist = dot_product(point, normalToPlane) + offset;
-  vnl_double_3 vec = dist*normalToPlane;
-  return point - vec;
-}
-
-double getAngle(const vnl_double_3& u, const vnl_double_3& v)
-{
-  return acos(dot_product(u,v)/(u.two_norm()*v.two_norm()));
-}
-
-void getAxisAndRotationAngle(vnl_double_3 v, vnl_double_3 v_new, vnl_double_3& axis, double& angle)
-{
-  axis = vnl_cross_3d(v, v_new);
-  angle = getAngle(v,v_new);
-}
-
-double computeMeanDistance(const std::vector<vnl_double_3>& x1, const std::vector<vnl_double_3>& x2)
-{
-  if(x1.size() != x2.size())
-    return DBL_MAX;
-  double result = 0.;
-  for(int i=0; i<x1.size(); i++)
-  {
-    vnl_double_3 diff = x1[i]-x2[i];
-    result += diff.two_norm();
-  }
-  result /= x1.size();
+  vnl_double_3 result;
+  result[0]=arr[0];
+  result[1]=arr[1];
+  result[2]=arr[2];
   return result;
+}
+
+void vnlToArrayDouble(vnl_double_3 v, double arr[4])
+{
+  arr[0]=v[0];
+  arr[1]=v[1];
+  arr[2]=v[2];
+  arr[3]=1.0;
 }
 
 std::vector<float> vtkToStdMatrix(vtkMatrix4x4* matrix)
@@ -754,65 +722,31 @@ void getVtkMatrixFromVector(const std::vector<float>& vec, vtkMatrix4x4* vtkMatr
     vtkMatrix->SetElement(i,j,vec[i*4+j]);
 }
 
-void vtkSlicerSurfFeaturesLogic::updateMatchNode()
+// ===========================================
+// Helpers - geometry functions
+// ===========================================
+vnl_matrix<double> getRotationMatrix(vnl_double_3 & axis, double theta)
 {
-  // Do nothing if we did not calculate correspondences yet
-  if(this->correspondenceProgress != 100)
-    return;
-  int trainIndex = this->bestMatches[this->currentImgIndex];
-  vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
-  vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
-  getVtkMatrixFromVector(this->trainImagesTransform[trainIndex], transform);
-  combinedTransform->Concatenate(transform);
-  combinedTransform->Concatenate(this->ImageToProbeTransform);
-  vtkSmartPointer<vtkMatrix4x4> matrix = combinedTransform->GetMatrix();
-
-
-  const cv::Mat& image = this->trainImageWithFeatures;
-  int width = image.cols;
-  int height = image.rows;
-  vtkSmartPointer<vtkImageImport> importer = vtkSmartPointer<vtkImageImport>::New();
-  // TODO: check type of opencv image data first...
-  importer->SetDataScalarTypeToUnsignedChar();
-  importer->SetImportVoidPointer(image.data);
-  importer->SetWholeExtent(0,width-1,0, height-1, 0, 0);
-  importer->SetDataExtentToWholeExtent();
-  importer->Update();
-  this->matchImageData = importer->GetOutput();
-
-
-  this->queryImageData = importer->GetOutput();
-  this->matchNode->SetAndObserveImageData(this->matchImageData);
-  this->matchNode->SetIJKToRASMatrix(matrix);
-
-  if(!this->GetMRMLScene()->IsNodePresent(this->matchNode))
-    this->GetMRMLScene()->AddNode(this->matchNode);
-}
-
-vnl_double_3 arrayToVnlDouble(double arr[4])
-{
-  vnl_double_3 result;
-  result[0]=arr[0];
-  result[1]=arr[1];
-  result[2]=arr[2];
+  vnl_matrix<double> result(3,3);
+  result(0,0) = cos(theta)+axis[0]*axis[0]*(1-cos(theta));
+  result(0,1) = axis[0]*axis[1]*(1-cos(theta))-axis[2]*sin(theta);
+  result(0,2) = axis[0]*axis[2]*(1-cos(theta))+axis[1]*sin(theta);
+  result(1,0) = axis[1]*axis[0]*(1-cos(theta))+axis[2]*sin(theta);
+  result(1,1) = cos(theta)+axis[1]*axis[1]*(1-cos(theta));
+  result(1,2) = axis[1]*axis[2]*(1-cos(theta))-axis[0]*sin(theta);
+  result(2,0) = axis[2]*axis[0]*(1-cos(theta))-axis[1]*sin(theta);
+  result(2,1) = axis[2]*axis[1]*(1-cos(theta))+axis[0]*sin(theta);
+  result(2,2) = cos(theta)+axis[2]*axis[2]*(1-cos(theta));
+  result.normalize_columns();
   return result;
 }
 
-void vnlToArrayDouble(vnl_double_3 v, double arr[4])
+vnl_double_3 projectPoint(vnl_double_3 point, vnl_double_3 normalToPlane, double offset)
 {
-  arr[0]=v[0];
-  arr[1]=v[1];
-  arr[2]=v[2];
-  arr[3]=1.0;
-}
-
-vnl_double_3 transformPoint(const vnl_double_3 in, vtkMatrix4x4* transform)
-{
-  double point[4];
-  vnlToArrayDouble(in, point);
-  double point_t[4];
-  transform->MultiplyPoint(point, point_t);
-  return arrayToVnlDouble(point_t);
+  normalToPlane.normalize();
+  double dist = dot_product(point, normalToPlane) + offset;
+  vnl_double_3 vec = dist*normalToPlane;
+  return point - vec;
 }
 
 void getPlaneFromPoints(vnl_double_3 p1, vnl_double_3 p2, vnl_double_3 p3, vnl_double_3& normal, double& d)
@@ -828,6 +762,43 @@ void getPlaneFromPoints(vnl_double_3 p1, vnl_double_3 p2, vnl_double_3 p3, vnl_d
     d = -dot_product(p1,normal);      // Because a.x1+b.x2+c.x3+d=0
 }
 
+double getAngle(const vnl_double_3& u, const vnl_double_3& v)
+{
+  return acos(dot_product(u,v)/(u.two_norm()*v.two_norm()));
+}
+
+void getAxisAndRotationAngle(vnl_double_3 v, vnl_double_3 v_new, vnl_double_3& axis, double& angle)
+{
+  axis = vnl_cross_3d(v, v_new);
+  angle = getAngle(v,v_new);
+}
+
+vnl_double_3 transformPoint(const vnl_double_3 in, vtkMatrix4x4* transform)
+{
+  double point[4];
+  vnlToArrayDouble(in, point);
+  double point_t[4];
+  transform->MultiplyPoint(point, point_t);
+  return arrayToVnlDouble(point_t);
+}
+
+double computeMeanDistance(const std::vector<vnl_double_3>& x1, const std::vector<vnl_double_3>& x2)
+{
+  if(x1.size() != x2.size())
+    return DBL_MAX;
+  double result = 0.;
+  for(int i=0; i<x1.size(); i++)
+  {
+    vnl_double_3 diff = x1[i]-x2[i];
+    result += diff.two_norm();
+  }
+  result /= x1.size();
+  return result;
+}
+
+// ===========================================
+// Helpers - other
+// ===========================================
 void writeMatlabFile(const std::vector<vnl_double_3>& queryPoints, const std::vector<vnl_double_3>& trainPoints, const std::vector<int>& inliersIdx,  vtkMatrix4x4* groundTruth, vtkMatrix4x4* estimate, int maxX, int maxY)
 {
   #ifdef WIN32
@@ -1176,6 +1147,41 @@ void vtkSlicerSurfFeaturesLogic::updateQueryNode()
   if(!this->GetMRMLScene()->IsNodePresent(this->queryNode))
     this->GetMRMLScene()->AddNode(this->queryNode);
 
+}
+
+void vtkSlicerSurfFeaturesLogic::updateMatchNode()
+{
+  // Do nothing if we did not calculate correspondences yet
+  if(this->correspondenceProgress != 100)
+    return;
+  int trainIndex = this->bestMatches[this->currentImgIndex];
+  vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
+  vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
+  getVtkMatrixFromVector(this->trainImagesTransform[trainIndex], transform);
+  combinedTransform->Concatenate(transform);
+  combinedTransform->Concatenate(this->ImageToProbeTransform);
+  vtkSmartPointer<vtkMatrix4x4> matrix = combinedTransform->GetMatrix();
+
+
+  const cv::Mat& image = this->trainImageWithFeatures;
+  int width = image.cols;
+  int height = image.rows;
+  vtkSmartPointer<vtkImageImport> importer = vtkSmartPointer<vtkImageImport>::New();
+  // TODO: check type of opencv image data first...
+  importer->SetDataScalarTypeToUnsignedChar();
+  importer->SetImportVoidPointer(image.data);
+  importer->SetWholeExtent(0,width-1,0, height-1, 0, 0);
+  importer->SetDataExtentToWholeExtent();
+  importer->Update();
+  this->matchImageData = importer->GetOutput();
+
+
+  this->queryImageData = importer->GetOutput();
+  this->matchNode->SetAndObserveImageData(this->matchImageData);
+  this->matchNode->SetIJKToRASMatrix(matrix);
+
+  if(!this->GetMRMLScene()->IsNodePresent(this->matchNode))
+    this->GetMRMLScene()->AddNode(this->matchNode);
 }
 
 void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
