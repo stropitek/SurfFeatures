@@ -888,7 +888,7 @@ void writeMatlabFile(const std::vector<vnl_double_3>& queryPoints, const std::ve
   c = -d_g/normal_g[2];
   matlabof << "gfunc=@(x,y)(" << a << "*x+" << b << "*y+" << c << ");\n";
 
-  matlabof << "scatter3(X,Y,Z,20,'red'); hold on; scatter3(Xi,Yi,Zi,20,'blue'); scatter3(Xq,Yq,Zq,20,'green');\n";
+  matlabof << "scatter3(X,Y,Z,50,'red','filled'); hold on; scatter3(Xi,Yi,Zi,50,'blue','filled'); scatter3(Xq,Yq,Zq,50,'green','filled');\n";
  
   matlabof << "cornerXe = [" << vpe1[0] << " " << vpe2[0] << " " << vpe3[0] << " " << vpe4[0] << "];\n";
   matlabof << "cornerYe = [" << vpe1[1] << " " << vpe2[1] << " " << vpe3[1] << " " << vpe4[1] << "];\n";
