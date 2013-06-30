@@ -1245,10 +1245,9 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   }
 
   // Compute normal plane based on three selected points by ransac
-  vnl_double_3 plane = vnl_cross_3d(trainPoints[planePointsIdx[0]]-trainPoints[planePointsIdx[1]], trainPoints[planePointsIdx[0]]-trainPoints[planePointsIdx[2]]);
-  plane.normalize();
-  double d = -dot_product(trainPoints[planePointsIdx[0]],plane);
-
+  vnl_double_3 plane;
+  double d;
+  getPlaneFromPoints(trainPoints[planePointsIdx[0]],trainPoints[planePointsIdx[1]], trainPoints[planePointsIdx[2]], plane, d);
 
   // Project the train keypoints to the computed plane
   std::vector<vnl_double_3> projTrainPoints;
