@@ -257,7 +257,7 @@ void qSlicerSurfFeaturesModuleWidget::onComputeCorrespondences()
   if(d->correspondenceTimer->isActive())
     return;
   vtkSlicerSurfFeaturesLogic* logic = d->logic();
-  logic->computeInterSliceCorrespondence();
+  logic->startInterSliceCorrespondence();
   d->correspondenceTimer->start();
 }
 

@@ -31,7 +31,13 @@ void computeAll(vtkSlicerSurfFeaturesLogic* surf)
   }
   
   // Compute correspondences
-  surf->computeInterSliceCorrespondence();
+  surf->startInterSliceCorrespondence();
+  while(true)
+  {
+    if(!surf->isCorrespondenceComputing())
+      break;
+    surf->computeNextInterSliceCorrespondence();
+  }
 }
 
 

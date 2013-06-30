@@ -159,7 +159,7 @@ public:
   void computeNextQuery();
   void computeNextTrain();
   void computeNextBogus();
-  void computeInterSliceCorrespondence();
+  void startInterSliceCorrespondence();
   void computeNextInterSliceCorrespondence();
 
   // Private helpers

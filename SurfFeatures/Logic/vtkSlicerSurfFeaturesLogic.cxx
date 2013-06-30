@@ -1709,19 +1709,13 @@ void vtkSlicerSurfFeaturesLogic::computeNextBogus()
  this->setBogusProgress(this->computeNext(this->bogusImages, this->bogusKeypoints, this->bogusDescriptors, this->bogusDescriptorMatcher)); 
 }
 
-void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
+void vtkSlicerSurfFeaturesLogic::startInterSliceCorrespondence()
 {
-  if(this->queryImages.empty() || this->bogusImages.empty() || this->trainImages.empty())
-    return;
-    
-  if(this->isLoading())
-    return;
-
   this->bestMatches.clear();
   this->bestMatchesCount.clear();
   this->matchesWithBestTrainImage.clear();
   this->afterHoughMatches.clear();
-  
+  this->correspondenceProgress = 0;
   this->Modified();
 }
 
