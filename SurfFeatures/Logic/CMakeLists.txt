@@ -18,12 +18,6 @@ set(${KIT}_SRCS
 set(${KIT}_TARGET_LIBRARIES
   ${ITK_LIBRARIES}
   )
-  
-  
-# get_cmake_property(_variableNames VARIABLES)
-# foreach (_variableName ${_variableNames})
-#   message(STATUS "${_variableName}=${${_variableName}}")
-# endforeach()
 
 message(STATUS "nlopt include: ${NLOPT_INCLUDE_DIRECTORIES}")
 message(STATUS "nlopt library: ${NLOPT_LIBRARIES}")
@@ -36,4 +30,12 @@ SlicerMacroBuildModuleLogic(
   INCLUDE_DIRECTORIES ${${KIT}_INCLUDE_DIRECTORIES} ${OpenCV_INCLUDE_DIRS}
   SRCS ${${KIT}_SRCS}
   TARGET_LIBRARIES ${${KIT}_TARGET_LIBRARIES} ${OpenCV_LIBS}
-  )
+)
+  
+get_cmake_property(_variableNames VARIABLES)
+foreach (_variableName ${_variableNames})
+  message(STATUS "${_variableName}=${${_variableName}}")
+endforeach()
+
+add_executable(surfcmd surfcmd.cxx)
+target_link_libraries(surfcmd ${OpenCV_LIBS} ${KIT})
