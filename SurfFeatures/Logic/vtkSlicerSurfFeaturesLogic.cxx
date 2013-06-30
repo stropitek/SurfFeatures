@@ -1485,9 +1485,7 @@ void vtkSlicerSurfFeaturesLogic::showImage(const cv::Mat& img, const std::vector
     return;
   cv::Mat img_keypoints;
   cv::drawKeypoints( img, keypoints, img_keypoints, cv::Scalar::all(-1), cv::DrawMatchesFlags::DEFAULT );
-  int x,y;
-  this->computeCentroid(this->croppedMask,x,y);
-  cv::Point centroid(x,y);
+  cv::Point centroid(this->xcentroid,this->ycentroid);
   cv::circle(img_keypoints, centroid, 20, cv::Scalar(255,255,255), 3);
 
   cvStartWindowThread();
@@ -1646,6 +1644,8 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
   // Crop the mask
   this->croppedMask = this->mask.clone();
   cropData(this->croppedMask);
+  // Compute centroid
+  this->computeCentroid(this->croppedMask, this->xcentroid, this->ycentroid);
   
   for(int i=0; i<images.size(); i++)
   {
@@ -1722,9 +1722,6 @@ void vtkSlicerSurfFeaturesLogic::computeInterSliceCorrespondence()
   this->matchesWithBestTrainImage.clear();
   this->afterHoughMatches.clear();
   
-  // Compute mask centroid
-  this->computeCentroid(this->croppedMask, this->xcentroid, this->ycentroid);
-  
   this->Modified();
 }
 
@@ -1735,7 +1732,6 @@ void vtkSlicerSurfFeaturesLogic::computeNextInterSliceCorrespondence()
     
   if(this->isQueryLoading() || this->isBogusLoading() || this->isTrainLoading())
     return;
-
   
   // Go to next query image
   int i = this->afterHoughMatches.size();
