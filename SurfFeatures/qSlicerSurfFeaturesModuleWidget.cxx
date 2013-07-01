@@ -315,8 +315,10 @@ void qSlicerSurfFeaturesModuleWidget::updateParameters()
   if(d->bogusTimer->isActive() && !logic->isBogusLoading())
     d->bogusTimer->stop();
     
-  if(d->correspondenceTimer->isActive() && !logic->isCorrespondenceComputing())
+  if(d->correspondenceTimer->isActive() && !logic->isCorrespondenceComputing()) {
     d->correspondenceTimer->stop();
+    logic->resetResults();
+  }
 
   d->queryFromSpinBox->setValue(logic->getQueryStartFrame());
   d->queryToSpinBox->setValue(logic->getQueryStopFrame());

@@ -38,4 +38,4 @@ foreach (_variableName ${_variableNames})
 endforeach()
 
 add_executable(surfcmd surfcmd.cxx)
-target_link_libraries(surfcmd ${OpenCV_LIBS} ${KIT})
+target_link_libraries(surfcmd ${KIT})

@@ -1191,7 +1191,6 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     return;
   std::ostringstream oss;
   
-  
   // Find the ground truth transform
   vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
   getVtkMatrixFromVector(this->queryImagesTransform[this->currentImgIndex], transform);
@@ -1234,17 +1233,17 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     
   }
 
-
   // Apply ransac algorithm to estimate a plane from train matches
   std::vector<int> inliersIdx;
   std::vector<int> planePointsIdx;
   this->ransac(trainPoints, inliersIdx, planePointsIdx);
+  this->iInliers[this->currentImgIndex] = inliersIdx.size();
+  this->iOutliers[this->currentImgIndex] = trainPoints.size() - inliersIdx.size();
   if(planePointsIdx.empty())
   {
     this->console->insertPlainText("Not enough matches to construct plane\n");
     return;
   }
-
   // Compute normal plane based on three selected points by ransac
   vnl_double_3 plane;
   double d;
@@ -1256,7 +1255,6 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   {
     projTrainPoints.push_back(projectPoint(trainPoints[i], plane, d));
   }
-
   // In this plane normal vector we got wx,wy,wz figured out. Now we want ux,uy,uz
   int max_iter = 10000;
   int mult = 20;
@@ -1291,7 +1289,6 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     u += u_i;
   }
   
-
   // We figure out v computing the cross product between u and w, 
   // v is just the cross product between u and w, but we computed v before to figure out the correct direction...
   u /= iter;
@@ -1356,6 +1353,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     queryInlierPoints.push_back(transformPoint(qpoint, estimate));
   }
   double meanMatchDistance = computeMeanDistance(trainInlierPoints, queryInlierPoints);
+  this->matchDistances[this->currentImgIndex] = meanMatchDistance;
   oss << "Mean Match Distance: " << meanMatchDistance << std::endl;
   
 
@@ -1378,6 +1376,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     }
   }
   double meanPlaneDistance = computeMeanDistance(queryPlanePoints, estimatePlanePoints);
+  this->planeDistances[this->currentImgIndex] = meanPlaneDistance;
   oss << "Mean Plane Distance: " << meanPlaneDistance << std::endl;
   this->console->insertPlainText(oss.str().c_str());
 
@@ -1720,6 +1719,18 @@ void vtkSlicerSurfFeaturesLogic::startInterSliceCorrespondence()
   this->Modified();
 }
 
+void vtkSlicerSurfFeaturesLogic::resetResults()
+{
+  this->iInliers.clear();
+  this->iOutliers.clear();
+  this->matchDistances.clear();
+  this->planeDistances.clear();
+  this->iInliers.resize(this->queryImages.size(),0);
+  this->iOutliers.resize(this->queryImages.size(),0);
+  this->matchDistances.resize(this->queryImages.size(),0);
+  this->planeDistances.resize(this->queryImages.size(),0);
+}
+
 void vtkSlicerSurfFeaturesLogic::computeNextInterSliceCorrespondence()
 {
   if(this->queryImages.empty() || this->bogusImages.empty() || this->trainImages.empty())
@@ -1864,6 +1875,16 @@ void vtkSlicerSurfFeaturesLogic::computeNextInterSliceCorrespondence()
   this->setCorrespondenceProgress(progress);
 }
 
+void vtkSlicerSurfFeaturesLogic::simulateAll()
+{
+  this->resetResults();
+  for(int i=0; i<queryImages.size(); i++)
+  {
+    this->currentImgIndex = i;
+    this->updateMatchNodeRansac();
+  }
+}
+
 cv::Mat vtkSlicerSurfFeaturesLogic::drawFeatures(const cv::Mat& img, const std::vector<cv::KeyPoint>& keypoints)
 {
   cv::Mat result = img.clone();
@@ -2001,8 +2022,7 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
       idx[1] = rand()%points.size();
       idx[2] = rand()%points.size();
     }
-    if((idx[0]==47 || idx[1]==47 || idx[2]==47) && (idx[0]==48 || idx[1]==48 || idx[2]==48))
-      std::cout << "hello" ;
+    
     // Compute the plane based on these three point
     vnl_double_3 p1,p2,p3;
     p1 = points[idx[0]];
@@ -2015,7 +2035,8 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
     v1.normalize();
     v2.normalize();
 
-    if(v1.two_norm() < 0.99 || v2.two_norm() < 0.99) // can happen when v is (0,0,0)
+    // can happen when two keypoints are at the same location and v is (0,0,0)
+    if(v1.two_norm() < 0.99 || v2.two_norm() < 0.99) 
       continue;
     // Make sure the vectors are not colinear to avoid numerical problems
     if(abs(dot_product(v1,v2)) > 0.99)

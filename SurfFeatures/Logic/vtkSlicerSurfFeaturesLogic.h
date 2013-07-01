@@ -160,7 +160,9 @@ public:
   void computeNextTrain();
   void computeNextBogus();
   void startInterSliceCorrespondence();
+  void resetResults();
   void computeNextInterSliceCorrespondence();
+  void simulateAll();
 
   // Private helpers
 private:
@@ -287,6 +289,12 @@ private:
   float cropRatios[4];
   vtkSmartPointer<vtkMatrix4x4> ImageToProbeTransform;
   
+  // Results
+  std::vector<int> iInliers;
+  std::vector<int> iOutliers;
+  std::vector<double> matchDistances;
+  std::vector<double> planeDistances;
+  
 
 public:
   // ======================================
@@ -328,6 +336,12 @@ public:
   GETSET(double, cropRatios[1], RightCrop);
   GETSET(double, cropRatios[2], TopCrop);
   GETSET(double, cropRatios[3], BottomCrop);
+  
+  // Results
+  GET(std::vector<int>, iInliers, IInliers);
+  GET(std::vector<int>, iOutliers, IOutliers);
+  GET(std::vector<double>, matchDistances, MatchDistances);
+  GET(std::vector<double>, planeDistances, PlaneDistances);
 };
 
 
