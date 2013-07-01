@@ -6,7 +6,6 @@ void computeAll(vtkSlicerSurfFeaturesLogic* surf)
   surf->computeTrain();
   surf->computeQuery();
 
-  std::cout << "hey1" << std::endl;
   // Compute bogus
   while(true)
   {
@@ -32,19 +31,14 @@ void computeAll(vtkSlicerSurfFeaturesLogic* surf)
     surf->computeNextQuery();
   }
 
-  std::cout << "hey18" << std::endl;
   // Compute correspondences
   surf->startInterSliceCorrespondence();
   while(true)
   {
     if(!surf->isCorrespondenceComputing())
       break;
-    std::cout << "hey4" << std::endl;
     surf->computeNextInterSliceCorrespondence();
-    std::cout << "hey5" << std::endl;
-  }
-  std::cout << "hey6" << std::endl;
-  
+  }  
 }
 
 void writeVarForMatlab(std::ofstream& ofs, std::string name, int var)
@@ -59,7 +53,7 @@ void writeVarForMatlab(std::ofstream& ofs, std::string name, std::string var)
 
 void writeVarForMatlab(std::ofstream& ofs, std::string name, std::vector<int> var)
 {
-  ofs << name << " %d" << var.size();
+  ofs << name << " %d " << var.size();
   for(int i=0; i<var.size(); i++)
   {
     ofs << " " << var[i];
@@ -69,7 +63,7 @@ void writeVarForMatlab(std::ofstream& ofs, std::string name, std::vector<int> va
 
 void writeVarForMatlab(std::ofstream& ofs, std::string name, std::vector<double> var)
 {
-  ofs << name << " %f" << var.size();
+  ofs << name << " %f " << var.size();
   for(int i=0; i<var.size(); i++)
   {
     ofs << " " << var[i];
@@ -79,7 +73,7 @@ void writeVarForMatlab(std::ofstream& ofs, std::string name, std::vector<double>
 
 void writeVarForMatlab(std::ofstream& ofs, std::string name, std::vector<float> var)
 {
-  ofs << name << " %f" << var.size();
+  ofs << name << " %f " << var.size();
   for(int i=0; i<var.size(); i++)
   {
     ofs << " " << var[i];
@@ -89,7 +83,7 @@ void writeVarForMatlab(std::ofstream& ofs, std::string name, std::vector<float> 
 
 void writeVarForMatlab(std::ofstream& ofs, std::string name, std::vector<std::string> var)
 {
-  ofs << name << " %s" << var.size();
+  ofs << name << " %s " << var.size();
   for(int i=0; i<var.size(); i++)
   {
     ofs << " " << var[i];
@@ -145,7 +139,11 @@ int main (int argc, char const *argv[])
   }
 
   int count = 0;
-  std::ofstream ofs("/Users/dkostro/Project/MProject/data/US/Results/surfResults.txt");
+  #ifdef WIN32
+  std::ofstream ofs("C:\\Users\\DanK\\MProject\\data\\Results\\surfResults.txt");
+  #else
+  std::ofstream ofs("/Users/dkostro/Projects/MProject/data/US/Results/surfResults.txt");
+  #endif
   for(int i=0; i<iFiles; i++)
   {
     count++;
@@ -159,7 +157,6 @@ int main (int argc, char const *argv[])
     surf->setBogusStopFrame(bogusStopFrames[i]);
     surf->setTrainStopFrame(trainStopFrames[i]);
     surf->setQueryStopFrame(queryStopFrames[i]);
-    std::cout << "hey1" << std::endl;
     for(int j=0; j<minHessians.size(); j++)
     {
       surf->setMinHessian(minHessians[j]);
@@ -182,7 +179,6 @@ int main (int argc, char const *argv[])
       }
     }
   }
-  std::cout << "hey10" << std::endl;
   surf->Delete();
   return 0;
 }
