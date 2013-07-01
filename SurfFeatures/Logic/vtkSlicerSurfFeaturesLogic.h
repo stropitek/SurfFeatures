@@ -110,7 +110,6 @@ private:
   void drawBestTrainMatches();
 
   // Other
-  void computeCentroid(const cv::Mat& mask, int& x, int& y);
   bool cropRatiosValid();
 
   // =============================================

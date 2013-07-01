@@ -796,6 +796,29 @@ double computeMeanDistance(const std::vector<vnl_double_3>& x1, const std::vecto
   return result;
 }
 
+void computeCentroid(const cv::Mat& mask, int& x, int& y)
+{
+  float rowcentroid=0;
+  float colcentroid=0;
+  int count = 0;
+  for(int i=0; i<mask.rows; i++)
+  {
+    for(int j=0; j<mask.cols; j++)
+    {
+      if(mask.at<unsigned char>(i,j) > 0)
+      {
+        rowcentroid += i;
+        colcentroid += j;
+        count += 1;
+      }
+    }
+  }
+  rowcentroid /= count;
+  colcentroid /= count;
+  y = (int)rowcentroid;
+  x = (int)colcentroid;
+}
+
 // ===========================================
 // Helpers - other
 // ===========================================
@@ -1645,7 +1668,7 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
   this->croppedMask = this->mask.clone();
   cropData(this->croppedMask);
   // Compute centroid
-  this->computeCentroid(this->croppedMask, this->xcentroid, this->ycentroid);
+  computeCentroid(this->croppedMask, this->xcentroid, this->ycentroid);
   
   for(int i=0; i<images.size(); i++)
   {
@@ -2092,29 +2115,6 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
   oss << bestError/inliersIdx.size() << " mm error, " << inliersIdx.size() << " inliers, " << numOutliersBest << " outliers."  << std::endl;
   this->console->insertPlainText(oss.str().c_str());
   return 0;
-}
-
-void vtkSlicerSurfFeaturesLogic::computeCentroid(const cv::Mat& mask, int& x, int& y)
-{
-  float rowcentroid=0;
-  float colcentroid=0;
-  int count = 0;
-  for(int i=0; i<mask.rows; i++)
-  {
-    for(int j=0; j<mask.cols; j++)
-    {
-      if(mask.at<unsigned char>(i,j) > 0)
-      {
-        rowcentroid += i;
-        colcentroid += j;
-        count += 1;
-      }
-    }
-  }
-  rowcentroid /= count;
-  colcentroid /= count;
-  y = (int)rowcentroid;
-  x = (int)colcentroid;
 }
 
 bool vtkSlicerSurfFeaturesLogic::cropRatiosValid()
