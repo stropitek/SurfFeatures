@@ -116,6 +116,7 @@ private:
   // Console
   // =============================================
   void stopWatchWrite(std::ostringstream& oss);
+  void log(const std::string& text);
   void resetConsoleFont();
 
   // =============================================

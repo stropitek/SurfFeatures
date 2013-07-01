@@ -944,10 +944,12 @@ void writeMatlabFile(const std::vector<vnl_double_3>& queryPoints, const std::ve
 }
 
 
-//----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkSlicerSurfFeaturesLogic);
 
-//----------------------------------------------------------------------------
+vtkSlicerSurfFeaturesLogic::~vtkSlicerSurfFeaturesLogic()
+{
+}
+
 vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
 {
   this->node = NULL;
@@ -987,6 +989,7 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->bogusProgress = 0;
   this->correspondenceProgress = 0;
   
+  this->console = NULL;
   this->playDirection = 1;
 
   // Load mask
@@ -1051,11 +1054,6 @@ void vtkSlicerSurfFeaturesLogic::setCorrespondenceProgress(int p){
     this->correspondenceProgress = p;
     this->Modified();
   }
-}
-
-//----------------------------------------------------------------------------
-vtkSlicerSurfFeaturesLogic::~vtkSlicerSurfFeaturesLogic()
-{
 }
 
 //----------------------------------------------------------------------------
@@ -1168,8 +1166,10 @@ void vtkSlicerSurfFeaturesLogic::updateQueryNode()
   this->queryNode->SetAndObserveImageData(this->queryImageData);
   this->queryNode->SetIJKToRASMatrix(matrix);
 
-  if(!this->GetMRMLScene()->IsNodePresent(this->queryNode))
-    this->GetMRMLScene()->AddNode(this->queryNode);
+  if(this->GetMRMLScene()) {
+    if(!this->GetMRMLScene()->IsNodePresent(this->queryNode))
+      this->GetMRMLScene()->AddNode(this->queryNode);
+  }
 
 }
 
@@ -1204,8 +1204,10 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNode()
   this->matchNode->SetAndObserveImageData(this->matchImageData);
   this->matchNode->SetIJKToRASMatrix(matrix);
 
-  if(!this->GetMRMLScene()->IsNodePresent(this->matchNode))
-    this->GetMRMLScene()->AddNode(this->matchNode);
+  if(this->GetMRMLScene()) {
+    if(!this->GetMRMLScene()->IsNodePresent(this->matchNode))
+      this->GetMRMLScene()->AddNode(this->matchNode);
+  }
 }
 
 void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
@@ -1264,7 +1266,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   this->iOutliers[this->currentImgIndex] = trainPoints.size() - inliersIdx.size();
   if(planePointsIdx.empty())
   {
-    this->console->insertPlainText("Not enough matches to construct plane\n");
+    this->log("Not enough matches to construct plane\n");
     return;
   }
   // Compute normal plane based on three selected points by ransac
@@ -1401,7 +1403,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   double meanPlaneDistance = computeMeanDistance(queryPlanePoints, estimatePlanePoints);
   this->planeDistances[this->currentImgIndex] = meanPlaneDistance;
   oss << "Mean Plane Distance: " << meanPlaneDistance << std::endl;
-  this->console->insertPlainText(oss.str().c_str());
+  this->log(oss.str());
 
   // Writes a matlab file that makes a 3d plot of what's is going on
   writeMatlabFile(queryPoints, trainPoints, inliersIdx, groundTruth, estimate, this->queryImages[this->currentImgIndex].cols, this->queryImages[this->currentImgIndex].rows);
@@ -1430,8 +1432,10 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   this->matchNode->SetAndObserveImageData(this->matchImageData);
   this->matchNode->SetIJKToRASMatrix(estimate);
 
-  if(!this->GetMRMLScene()->IsNodePresent(this->matchNode))
-    this->GetMRMLScene()->AddNode(this->matchNode);
+  if(this->GetMRMLScene()) {
+    if(!this->GetMRMLScene()->IsNodePresent(this->matchNode))
+      this->GetMRMLScene()->AddNode(this->matchNode);
+  }
 }
 
 
@@ -1478,6 +1482,15 @@ void vtkSlicerSurfFeaturesLogic::resetConsoleFont()
   QFont font("Courier",8);
   font.setStretch(QFont::UltraCondensed);
   this->console->setCurrentFont(font);
+}
+
+void vtkSlicerSurfFeaturesLogic::log(const std::string& text)
+{
+  std::cout << text;
+  if(this->console)
+  {
+    this->console->insertPlainText(text.c_str());
+  }
 }
 
 void vtkSlicerSurfFeaturesLogic::showImage(vtkMRMLNode *node)
@@ -1594,7 +1607,7 @@ void vtkSlicerSurfFeaturesLogic::updateImage()
 {
   std::ostringstream oss;
   oss << "The current image is " << this->queryImagesNames[this->currentImgIndex] << std::endl;
-  this->console->insertPlainText(oss.str().c_str());
+  this->log(oss.str());
   this->drawQueryMatches();
   //this->drawBestTrainMatches();
   this->updateQueryNode();
@@ -1988,8 +2001,10 @@ void vtkSlicerSurfFeaturesLogic::showCropFirstImage()
   this->queryNode->SetAndObserveImageData(vtkImage);
   this->queryNode->SetIJKToRASMatrix(matrix);
 
-  if(!this->GetMRMLScene()->IsNodePresent(this->queryNode))
-    this->GetMRMLScene()->AddNode(this->queryNode);
+  if(this->GetMRMLScene()) {
+    if(!this->GetMRMLScene()->IsNodePresent(this->queryNode))
+      this->GetMRMLScene()->AddNode(this->queryNode);
+  }
 
 
 }
@@ -2113,7 +2128,7 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
   
   std::ostringstream oss;
   oss << bestError/inliersIdx.size() << " mm error, " << inliersIdx.size() << " inliers, " << numOutliersBest << " outliers."  << std::endl;
-  this->console->insertPlainText(oss.str().c_str());
+  this->log(oss.str());
   return 0;
 }
 
