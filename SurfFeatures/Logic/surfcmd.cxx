@@ -117,19 +117,28 @@ int main (int argc, char const *argv[])
   std::vector<int> queryStopFrames;
 
   bogusStartFrames.push_back(0);
-  bogusStopFrames.push_back(2);
+  bogusStopFrames.push_back(200);
   trainStartFrames.push_back(0);
-  trainStopFrames.push_back(2);
-  queryStartFrames.push_back(3);
-  queryStopFrames.push_back(5);
+  trainStopFrames.push_back(902);
+  queryStartFrames.push_back(903);
+  queryStopFrames.push_back(-1);
 
 
   std::vector<int> minHessians;
   std::vector<float> ransacMargins;
+  minHessians.push_back(300);
+  minHessians.push_back(200);
   minHessians.push_back(400);
+  minHessians.push_back(500);
+  minHessians.push_back(600);
+  
   ransacMargins.push_back(1.0);
+  ransacMargins.push_back(1.5);
+  ransacMargins.push_back(2.0);
+  ransacMargins.push_back(2.5);
+  ransacMargins.push_back(3.0);
 
-  int repetitions = 1;
+  int repetitions = 20;
 
   int iFiles = bogusFiles.size();
   if(trainFiles.size()!=iFiles || queryFiles.size()!=iFiles || bogusStartFrames.size()!=iFiles || trainStartFrames.size()!=iFiles || queryStartFrames.size()!=iFiles || bogusStopFrames.size()!=iFiles || trainStopFrames.size()!=iFiles || queryStopFrames.size()!=iFiles) {
