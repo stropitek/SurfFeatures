@@ -93,13 +93,6 @@ private:
   // ============================================
   // Helper Functions
   // ============================================
-
-  // Crop data (either opencv or vtk image)
-  vtkImageData* cropData(vtkImageData* data);
-  void cropData(cv::Mat& img);
-
-  // Conversions from opencv to vtk
-  cv::Mat convertImage(vtkImageData* data);
   
   // Check if tracking info for an image is invalid
   bool isTracked(vtkMRMLNode* node);
