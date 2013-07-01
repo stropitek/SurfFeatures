@@ -14,7 +14,6 @@ void computeAll(vtkSlicerSurfFeaturesLogic* surf)
     surf->computeNextBogus();
   }
 
-  std::cout << "hey1" << std::endl;
   // Compute Train
   while(true)
   {
@@ -173,6 +172,9 @@ int main (int argc, char const *argv[])
           writeVarForMatlab(ofs, oss.str()+".queryFile", queryFiles[i]);
           writeVarForMatlab(ofs, oss.str()+".ransacMargin", ransacMargins[k]);
           writeVarForMatlab(ofs, oss.str()+".minHessian", minHessians[j]);
+          writeVarForMatlab(ofs, oss.str()+".repetition", l);
+          writeVarForMatlab(ofs, oss.str()+".iInliers", surf->getIInliers());
+          writeVarForMatlab(ofs, oss.str()+".iOutliers", surf->getIOutliers());
           writeVarForMatlab(ofs, oss.str()+".matchDistance", surf->getMatchDistances());
           writeVarForMatlab(ofs, oss.str()+".planeDistance", surf->getPlaneDistances());
         }
