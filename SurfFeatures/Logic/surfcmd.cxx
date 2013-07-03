@@ -45,6 +45,16 @@ void writeVarForMatlab(std::ofstream& ofs, std::string name, int var)
   ofs << name << " %d 1 " << var << std::endl;
 }
 
+void writeVarForMatlib(std::ofstream& ofs, std::string name, float var)
+{
+  ofs << name << " %f 1 " << var << std::endl;
+}
+
+void writeVarForMatlib(std::ofstream& ofs, std::string name, double var)
+{
+  ofs << name << " %f 1 " << var << std::endl;
+}
+
 void writeVarForMatlab(std::ofstream& ofs, std::string name, std::string var)
 {
   ofs << name << " %s 1 " << var << std::endl;
@@ -154,7 +164,6 @@ int main (int argc, char const *argv[])
   #endif
   for(int i=0; i<iFiles; i++)
   {
-    count++;
     surf->setBogusFile(bogusFiles[i]);
     surf->setTrainFile(trainFiles[i]);
     surf->setTrainFile(queryFiles[i]);
@@ -172,6 +181,7 @@ int main (int argc, char const *argv[])
       for(int k=0; k<ransacMargins.size(); k++)
       {
         for(int l=0; l<repetitions; l++) {
+          count++;
           surf->setRansacMargin(ransacMargins[k]);
           surf->simulateAll();
           std::ostringstream oss;
