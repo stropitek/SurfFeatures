@@ -1058,6 +1058,7 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->queryNode->SetName("query node");
   this->matchNode = vtkMRMLScalarVolumeNode::New();
   this->matchNode->SetName("match node");
+  this->observedVolume = NULL;
 
   this->Modified();
 }
@@ -1155,6 +1156,53 @@ void vtkSlicerSurfFeaturesLogic::SetMRMLSceneInternal(vtkMRMLScene * newScene)
   events->InsertNextValue(vtkMRMLScene::NodeRemovedEvent);
   events->InsertNextValue(vtkMRMLScene::EndBatchProcessEvent);
   this->SetAndObserveMRMLSceneEventsInternal(newScene, events.GetPointer());
+}
+
+void vtkSlicerSurfFeaturesLogic::ProcessMRMLNodesEvents( vtkObject* caller, unsigned long event, void * callData )
+{
+  if ( caller == NULL )
+  {
+    return;
+  }
+  if(event == vtkMRMLVolumeNode::ImageDataModifiedEvent)
+  {
+    this->console->insertPlainText("New ImageDataModifiedEvent\n");
+    vtkMRMLScalarVolumeNode* scalarNode = vtkMRMLScalarVolumeNode::SafeDownCast( caller );
+    if(scalarNode)
+      this->console->insertPlainText("Scalar Volume Modified\n");
+  }
+  else
+    this->Superclass::ProcessMRMLNodesEvents( caller, event, callData );
+}
+
+void vtkSlicerSurfFeaturesLogic::setObservedVolume(vtkMRMLScalarVolumeNode *snode)
+{
+  if(snode==this->observedVolume)
+    return;
+  if(!snode){
+    this->removeObservedVolume();
+    return;
+  }
+
+  int wasModifying = this->StartModify();
+  if(this->observedVolume)
+    vtkSetAndObserveMRMLNodeMacro( this->observedVolume, 0 );
+
+  vtkMRMLScalarVolumeNode* newNode = NULL;
+  vtkSmartPointer< vtkIntArray > events = vtkSmartPointer< vtkIntArray >::New();
+  //events->InsertNextValue( vtkCommand::ModifiedEvent );
+  events->InsertNextValue( vtkMRMLVolumeNode::ImageDataModifiedEvent );
+  vtkSetAndObserveMRMLNodeEventsMacro( newNode, snode, events );
+  this->observedVolume = newNode;
+  
+  this->EndModify( wasModifying );
+}
+
+void vtkSlicerSurfFeaturesLogic::removeObservedVolume()
+{
+  if(this->observedVolume)
+    vtkSetAndObserveMRMLNodeMacro( this->observedVolume, 0 );
+  this->observedVolume = NULL;
 }
 
 //-----------------------------------------------------------------------------

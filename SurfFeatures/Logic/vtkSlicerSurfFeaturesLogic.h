@@ -84,6 +84,7 @@ protected:
   virtual void UpdateFromMRMLScene();
   virtual void OnMRMLSceneNodeAdded(vtkMRMLNode* node);
   virtual void OnMRMLSceneNodeRemoved(vtkMRMLNode* node);
+  virtual void ProcessMRMLNodesEvents( vtkObject* caller, unsigned long event, void * callData );
 private:
 
   vtkSlicerSurfFeaturesLogic(const vtkSlicerSurfFeaturesLogic&); // Not implemented
@@ -115,6 +116,11 @@ private:
   // =============================================
   // Visualization
   // =============================================
+
+  // Interface for setting and removing observed nodes
+public:
+  void setObservedVolume(vtkMRMLScalarVolumeNode *snode);
+  void removeObservedVolume();
 
   // Public Interface to visualization
 public:
@@ -191,6 +197,7 @@ private:
   vtkMRMLScalarVolumeNode* node;
   vtkMRMLScalarVolumeNode* queryNode;
   vtkMRMLScalarVolumeNode* matchNode;
+  vtkMRMLScalarVolumeNode* observedVolume;
 
   // Clock
   clock_t initTime;
