@@ -38,10 +38,8 @@ class qSlicerSurfFeaturesModuleWidgetPrivate: public Ui_qSlicerSurfFeaturesModul
 protected:
   qSlicerSurfFeaturesModuleWidget* const q_ptr;
   QTimer* timer;
-  QTimer* queryTimer;
   QTimer* trainTimer;
   QTimer* bogusTimer;
-  QTimer* correspondenceTimer;
 public:
   ~qSlicerSurfFeaturesModuleWidgetPrivate();
   qSlicerSurfFeaturesModuleWidgetPrivate(qSlicerSurfFeaturesModuleWidget& object);
@@ -56,25 +54,19 @@ public:
 qSlicerSurfFeaturesModuleWidgetPrivate::~qSlicerSurfFeaturesModuleWidgetPrivate()
 {
   delete timer;
-  delete queryTimer;
   delete trainTimer;
   delete bogusTimer;
-  delete correspondenceTimer;
 }
 
 qSlicerSurfFeaturesModuleWidgetPrivate::qSlicerSurfFeaturesModuleWidgetPrivate(qSlicerSurfFeaturesModuleWidget& object): q_ptr(&object)
 {
   timer = new QTimer;
-  queryTimer = new QTimer;
   trainTimer = new QTimer;
   bogusTimer = new QTimer;
-  correspondenceTimer = new QTimer;
   
   timer->setInterval(100);
-  queryTimer->setInterval(0);
   trainTimer->setInterval(0);
   bogusTimer->setInterval(0);
-  correspondenceTimer->setInterval(0);
 }
 
 vtkSlicerSurfFeaturesLogic* qSlicerSurfFeaturesModuleWidgetPrivate::logic() const
@@ -117,34 +109,27 @@ void qSlicerSurfFeaturesModuleWidget::setup()
 
   connect(d->bogusPathLineEdit, SIGNAL(currentPathChanged(const QString&)), this, SLOT(onBogusPathChanged(const QString&)));
   connect(d->trainPathLineEdit, SIGNAL(currentPathChanged(const QString&)), this, SLOT(onTrainPathChanged(const QString&)));
-  connect(d->queryPathLineEdit, SIGNAL(currentPathChanged(const QString&)), this, SLOT(onQueryPathChanged(const QString&)));
 
   connect(d->bogusFromSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onBogusStartFrameChanged(int)));
   connect(d->bogusToSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onBogusStopFrameChanged(int)));
   connect(d->trainFromSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onTrainStartFrameChanged(int)));
   connect(d->trainToSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onTrainStopFrameChanged(int)));
-  connect(d->queryFromSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onQueryStartFrameChanged(int)));
-  connect(d->queryToSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onQueryStopFrameChanged(int)));
 
   connect(d->computeBogusButton, SIGNAL(clicked()), this, SLOT(onComputeBogus()));
   connect(d->computeTrainButton, SIGNAL(clicked()), this, SLOT(onComputeTrain()));
-  connect(d->computeQueryButton, SIGNAL(clicked()), this, SLOT(onComputeQuery()));
 
   connect(d->previousImageButton, SIGNAL(clicked()), this, SLOT(onPreviousImage()));
   connect(d->nextImageButton, SIGNAL(clicked()), this, SLOT(onNextImage()));
   connect(d->showCurrentImageButton, SIGNAL(clicked()), this, SLOT(onShowCurrentImage())); 
   connect(d->saveImageButton, SIGNAL(clicked()), this, SLOT(onSaveCurrentImage()));
 
-  connect(d->computeCorrespondencesButton, SIGNAL(clicked()), this, SLOT(onComputeCorrespondences()));
 
   connect(d->timer, SIGNAL(timeout()), this, SLOT(onPlayImage()));
   connect(d->playButton, SIGNAL(clicked()), this, SLOT(onTogglePlay()));
   connect(d->playIntervalSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onPlayIntervalChanged(int)));
   
-  connect(d->queryTimer, SIGNAL(timeout()), this, SLOT(onQueryTimer()));
   connect(d->trainTimer, SIGNAL(timeout()), this, SLOT(onTrainTimer()));
   connect(d->bogusTimer, SIGNAL(timeout()), this, SLOT(onBogusTimer()));
-  connect(d->correspondenceTimer, SIGNAL(timeout()), this, SLOT(onCorrespondenceTimer()));
   
   connect(d->logMatchesButton, SIGNAL(clicked()), this, SLOT(onLogMatches()));
 
@@ -202,10 +187,8 @@ SLOTDEF_0(onShowCrop, showCropFirstImage);
 
 SLOTDEF_1(int,onTrainStartFrameChanged,setTrainStartFrame);
 SLOTDEF_1(int,onBogusStartFrameChanged,setBogusStartFrame);
-SLOTDEF_1(int,onQueryStartFrameChanged,setQueryStartFrame);
 SLOTDEF_1(int,onTrainStopFrameChanged,setTrainStopFrame);
 SLOTDEF_1(int,onBogusStopFrameChanged,setBogusStopFrame);
-SLOTDEF_1(int,onQueryStopFrameChanged,setQueryStopFrame);
 
 SLOTDEF_0(onPlayImage, play);
 
@@ -216,20 +199,8 @@ SLOTDEF_0(onSaveCurrentImage,saveCurrentImage);
 
 SLOTDEF_0(onLogMatches, writeMatches);
 
-SLOTDEF_0(onQueryTimer, computeNextQuery);
 SLOTDEF_0(onTrainTimer, computeNextTrain);
 SLOTDEF_0(onBogusTimer, computeNextBogus);
-SLOTDEF_0(onCorrespondenceTimer, computeNextInterSliceCorrespondence);
-
-void qSlicerSurfFeaturesModuleWidget::onComputeQuery()
-{
-  Q_D(qSlicerSurfFeaturesModuleWidget);
-  if(d->queryTimer->isActive())
-    return;
-  vtkSlicerSurfFeaturesLogic* logic = d->logic();
-  logic->computeQuery();
-  d->queryTimer->start();
-}
 
 void qSlicerSurfFeaturesModuleWidget::onComputeTrain()
 {
@@ -249,16 +220,6 @@ void qSlicerSurfFeaturesModuleWidget::onComputeBogus()
   vtkSlicerSurfFeaturesLogic* logic = d->logic();
   logic->computeBogus();
   d->bogusTimer->start();
-}
-
-void qSlicerSurfFeaturesModuleWidget::onComputeCorrespondences()
-{
-  Q_D(qSlicerSurfFeaturesModuleWidget);
-  if(d->correspondenceTimer->isActive())
-    return;
-  vtkSlicerSurfFeaturesLogic* logic = d->logic();
-  logic->startInterSliceCorrespondence();
-  d->correspondenceTimer->start();
 }
 
 void qSlicerSurfFeaturesModuleWidget::onTogglePlay()
@@ -287,12 +248,6 @@ void qSlicerSurfFeaturesModuleWidget::onTrainPathChanged(const QString& path)
   logic->setTrainFile(path.toStdString());
 }
 
-void qSlicerSurfFeaturesModuleWidget::onQueryPathChanged(const QString& path)
-{
-  Q_D(qSlicerSurfFeaturesModuleWidget);
-  vtkSlicerSurfFeaturesLogic* logic = d->logic();
-  logic->setQueryFile(path.toStdString());
-}
 
 void qSlicerSurfFeaturesModuleWidget::onBogusPathChanged(const QString& path)
 {
@@ -305,9 +260,6 @@ void qSlicerSurfFeaturesModuleWidget::updateParameters()
 {
   Q_D(qSlicerSurfFeaturesModuleWidget);
   vtkSlicerSurfFeaturesLogic* logic = d->logic();
-  
-  if(d->queryTimer->isActive() && !logic->isQueryLoading())
-    d->queryTimer->stop();
     
   if(d->trainTimer->isActive() && !logic->isTrainLoading())
     d->trainTimer->stop();
@@ -315,22 +267,14 @@ void qSlicerSurfFeaturesModuleWidget::updateParameters()
   if(d->bogusTimer->isActive() && !logic->isBogusLoading())
     d->bogusTimer->stop();
     
-  if(d->correspondenceTimer->isActive() && !logic->isCorrespondenceComputing()) {
-    d->correspondenceTimer->stop();
-    logic->resetResults();
-  }
 
-  d->queryFromSpinBox->setValue(logic->getQueryStartFrame());
-  d->queryToSpinBox->setValue(logic->getQueryStopFrame());
   d->trainFromSpinBox->setValue(logic->getTrainStartFrame());
   d->trainToSpinBox->setValue(logic->getTrainStopFrame());
   d->bogusFromSpinBox->setValue(logic->getBogusStartFrame());
   d->bogusToSpinBox->setValue(logic->getBogusStopFrame());
 
-  d->queryProgressBar->setValue(logic->getQueryProgress());
   d->trainProgressBar->setValue(logic->getTrainProgress());
   d->bogusProgressBar->setValue(logic->getBogusProgress());
-  d->correspondenceProgressBar->setValue(logic->getCorrespondenceProgress());
 
   d->leftCropSpinBox->setValue(logic->getLeftCrop());
   d->topCropSpinBox->setValue(logic->getTopCrop());
@@ -339,7 +283,6 @@ void qSlicerSurfFeaturesModuleWidget::updateParameters()
 
   d->bogusPathLineEdit->setCurrentPath(logic->getBogusFile().c_str());
   d->trainPathLineEdit->setCurrentPath(logic->getTrainFile().c_str());
-  d->queryPathLineEdit->setCurrentPath(logic->getQueryFile().c_str());
   
   d->minHessianSpinBox->setValue(logic->getMinHessian());
 }

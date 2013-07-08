@@ -56,23 +56,18 @@ public slots:
 
   void onBogusPathChanged(const QString&);
   void onTrainPathChanged(const QString&);
-  void onQueryPathChanged(const QString&);
 
   void onTrainStartFrameChanged(int);
   void onTrainStopFrameChanged(int);
   void onBogusStartFrameChanged(int);
   void onBogusStopFrameChanged(int);
-  void onQueryStartFrameChanged(int);
-  void onQueryStopFrameChanged(int);
 
   void onComputeBogus();
   void onComputeTrain();
-  void onComputeQuery();
 
   void onPreviousImage();
   void onNextImage();
   void onShowCurrentImage();
-  void onComputeCorrespondences();
   void onSaveCurrentImage();
 
   void updateParameters();
@@ -81,10 +76,8 @@ public slots:
   void onPlayImage();
   void onPlayIntervalChanged(int);
   
-  void onQueryTimer();
   void onTrainTimer();
   void onBogusTimer();
-  void onCorrespondenceTimer();
 
   void onLogMatches();
 
