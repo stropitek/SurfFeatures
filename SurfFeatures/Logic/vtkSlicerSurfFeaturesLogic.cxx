@@ -950,8 +950,12 @@ void writeMatlabFile(const std::vector<vnl_double_3>& queryPoints, const std::ve
  
   matlabof << "cornerXe = [" << vpe1[0] << " " << vpe2[0] << " " << vpe3[0] << " " << vpe4[0] << "];\n";
   matlabof << "cornerYe = [" << vpe1[1] << " " << vpe2[1] << " " << vpe3[1] << " " << vpe4[1] << "];\n";
+  matlabof << "cornerZe = [" << vpe1[2] << " " << vpe2[2] << " " << vpe3[2] << " " << vpe4[2] << "];\n";
   matlabof << "cornerXg = [" << vpg1[0] << " " << vpg2[0] << " " << vpg3[0] << " " << vpg4[0] << "];\n";
   matlabof << "cornerYg = [" << vpg1[1] << " " << vpg2[1] << " " << vpg3[1] << " " << vpg4[1] << "];\n";
+  matlabof << "cornerZg = [" << vpg1[2] << " " << vpg2[2] << " " << vpg3[2] << " " << vpg4[2] << "];\n";
+  
+  
 
   matlabof << "res = 40;\n"                                                                         ;
   matlabof << "h(1)=ezmesh(gfunc, [min(cornerXg) max(cornerXg) min(cornerYg) max(cornerYg)],res);\n";
