@@ -120,21 +120,13 @@ void qSlicerSurfFeaturesModuleWidget::setup()
   connect(d->computeBogusButton, SIGNAL(clicked()), this, SLOT(onComputeBogus()));
   connect(d->computeTrainButton, SIGNAL(clicked()), this, SLOT(onComputeTrain()));
 
-  connect(d->previousImageButton, SIGNAL(clicked()), this, SLOT(onPreviousImage()));
-  connect(d->nextImageButton, SIGNAL(clicked()), this, SLOT(onNextImage()));
-  connect(d->showCurrentImageButton, SIGNAL(clicked()), this, SLOT(onShowCurrentImage())); 
-  connect(d->saveImageButton, SIGNAL(clicked()), this, SLOT(onSaveCurrentImage()));
-
 
   connect(d->timer, SIGNAL(timeout()), this, SLOT(onPlayImage()));
-  connect(d->playButton, SIGNAL(clicked()), this, SLOT(onTogglePlay()));
-  connect(d->playIntervalSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onPlayIntervalChanged(int)));
+  connect(d->registerButton, SIGNAL(clicked()), this, SLOT(onRegister()));
   
   connect(d->trainTimer, SIGNAL(timeout()), this, SLOT(onTrainTimer()));
   connect(d->bogusTimer, SIGNAL(timeout()), this, SLOT(onBogusTimer()));
   
-  connect(d->logMatchesButton, SIGNAL(clicked()), this, SLOT(onLogMatches()));
-
 
   // call some slots to make them effective from start
 
@@ -200,15 +192,7 @@ SLOTDEF_1(int,onBogusStartFrameChanged,setBogusStartFrame);
 SLOTDEF_1(int,onTrainStopFrameChanged,setTrainStopFrame);
 SLOTDEF_1(int,onBogusStopFrameChanged,setBogusStopFrame);
 
-SLOTDEF_0(onPlayImage, play);
-
-SLOTDEF_0(onPreviousImage, previousImage);
-SLOTDEF_0(onNextImage,nextImage);
-SLOTDEF_0(onShowCurrentImage,showCurrentImage);
-SLOTDEF_0(onSaveCurrentImage,saveCurrentImage);
-
-SLOTDEF_0(onLogMatches, writeMatches);
-
+SLOTDEF_0(onRegister, play);
 SLOTDEF_0(onTrainTimer, computeNextTrain);
 SLOTDEF_0(onBogusTimer, computeNextBogus);
 
@@ -232,24 +216,6 @@ void qSlicerSurfFeaturesModuleWidget::onComputeBogus()
   d->bogusTimer->start();
 }
 
-void qSlicerSurfFeaturesModuleWidget::onTogglePlay()
-{
-  Q_D(qSlicerSurfFeaturesModuleWidget);
-  if(d->timer->isActive()){
-    d->playButton->setText(QString("Start Playing"));
-    d->timer->stop();
-  }
-  else {
-    d->playButton->setText(QString("Stop Playing"));
-    d->timer->start();
-  }
-}
-
-void qSlicerSurfFeaturesModuleWidget::onPlayIntervalChanged(int value)
-{
-  Q_D(qSlicerSurfFeaturesModuleWidget);
-  d->timer->setInterval(value);
-}
 
 void qSlicerSurfFeaturesModuleWidget::onTrainPathChanged(const QString& path)
 {

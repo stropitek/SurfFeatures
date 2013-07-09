@@ -67,22 +67,14 @@ public slots:
 
   void onComputeBogus();
   void onComputeTrain();
-
-  void onPreviousImage();
-  void onNextImage();
-  void onShowCurrentImage();
-  void onSaveCurrentImage();
+  
+  void onRegister();
 
   void updateParameters();
 
-  void onTogglePlay();
-  void onPlayImage();
-  void onPlayIntervalChanged(int);
   
   void onTrainTimer();
   void onBogusTimer();
-
-  void onLogMatches();
 
 protected:
   QScopedPointer<qSlicerSurfFeaturesModuleWidgetPrivate> d_ptr;
