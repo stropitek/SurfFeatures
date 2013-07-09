@@ -914,7 +914,7 @@ void writeMatlabFile(const std::vector<vnl_double_3>& queryPoints, const std::ve
 
   vnl_double_3 p1, p2, p3, p4;
   p1[0]=0; p1[1]=0; p1[2]=0;
-  p2[0]=0; p2[1]=maxY; p3[2]=0;
+  p2[0]=0; p2[1]=maxY; p2[2]=0;
   p3[0]=maxX; p3[1]=maxY; p3[2]=0;
   p4[0]=maxX; p4[1]=0; p4[2]=0;
 
