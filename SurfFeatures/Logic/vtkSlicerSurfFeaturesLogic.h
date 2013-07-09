@@ -205,6 +205,7 @@ private:
 
   // State
   int currentImgIndex;
+  bool registering;
 
   // train images, keypoints, descriptors and matcher
   std::vector<cv::Mat> trainImages;
@@ -301,6 +302,7 @@ public:
   // Attribute setters and getters
   // ======================================
   GETSET(double, ransacMargin, RansacMargin);
+  GETSET(bool, registering, Registering);
 
   void setMinHessian(int);
   int getMinHessian();

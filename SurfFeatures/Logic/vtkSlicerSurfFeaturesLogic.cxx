@@ -991,6 +991,7 @@ vtkSlicerSurfFeaturesLogic::~vtkSlicerSurfFeaturesLogic()
 vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
 {
   this->node = NULL;
+  this->registering = false;
   this->lastStopWatch = clock();
   this->initTime = clock();
   this->ransacMargin = 1.0;

@@ -122,7 +122,7 @@ void qSlicerSurfFeaturesModuleWidget::setup()
 
 
   connect(d->timer, SIGNAL(timeout()), this, SLOT(onPlayImage()));
-  connect(d->registerButton, SIGNAL(clicked()), this, SLOT(onRegister()));
+  connect(d->registerButton, SIGNAL(clicked()), this, SLOT(onToggleRegister()));
   
   connect(d->trainTimer, SIGNAL(timeout()), this, SLOT(onTrainTimer()));
   connect(d->bogusTimer, SIGNAL(timeout()), this, SLOT(onBogusTimer()));
@@ -192,9 +192,22 @@ SLOTDEF_1(int,onBogusStartFrameChanged,setBogusStartFrame);
 SLOTDEF_1(int,onTrainStopFrameChanged,setTrainStopFrame);
 SLOTDEF_1(int,onBogusStopFrameChanged,setBogusStopFrame);
 
-SLOTDEF_0(onRegister, play);
 SLOTDEF_0(onTrainTimer, computeNextTrain);
 SLOTDEF_0(onBogusTimer, computeNextBogus);
+
+void qSlicerSurfFeaturesModuleWidget::onToggleRegister()
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  if(logic->getRegistering()){
+    logic->setRegistering(false);
+    d->registerButton->setText("Start Registering");
+  }
+  else {
+    logic->setRegistering(true);
+    d->registerButton->setText("Stop Registering");
+  }
+}
 
 void qSlicerSurfFeaturesModuleWidget::onComputeTrain()
 {

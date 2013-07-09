@@ -68,7 +68,7 @@ public slots:
   void onComputeBogus();
   void onComputeTrain();
   
-  void onRegister();
+  void onToggleRegister();
 
   void updateParameters();
 
