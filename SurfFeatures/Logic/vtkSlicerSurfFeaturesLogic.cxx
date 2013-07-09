@@ -17,6 +17,7 @@ limitations under the License.
 
 // SurfFeatures Logic includes
 #include "vtkSlicerSurfFeaturesLogic.h"
+#include "logicUtility.hpp"
 
 // MRML includes 
 
@@ -857,6 +858,20 @@ void computeCentroid(const cv::Mat& mask, int& x, int& y)
 // ===========================================
 // Helpers - other
 // ===========================================
+void computeCorners(std::vector<vnl_double_3>& result, vtkMatrix4x4* transform, int maxX, int maxY) {
+  vnl_double_3 p1, p2, p3, p4;
+  p1[0]=0; p1[1]=0; p1[2]=0;
+  p2[0]=0; p2[1]=maxY; p2[2]=0;
+  p3[0]=maxX; p3[1]=maxY; p3[2]=0;
+  p4[0]=maxX; p4[1]=0; p4[2]=0;
+
+  result.push_back(transformPoint(p1, transform));
+  result.push_back(transformPoint(p2, transform));
+  result.push_back(transformPoint(p3, transform));
+  result.push_back(transformPoint(p4, transform));
+}
+
+
 void writeMatlabFile(const std::vector<vnl_double_3>& queryPoints, const std::vector<vnl_double_3>& trainPoints, const std::vector<int>& inliersIdx,  vtkMatrix4x4* groundTruth, vtkMatrix4x4* estimate, int maxX, int maxY)
 {
   #ifdef WIN32
@@ -2150,11 +2165,14 @@ bool vtkSlicerSurfFeaturesLogic::cropRatiosValid()
 
 void vtkSlicerSurfFeaturesLogic::writeMatches()
 {
+  if(this->correspondenceProgress != 100)
+    return;
+  // Writes a log file with matches
   const std::vector<std::vector<DMatch> >& m = this->afterHoughMatches;
   #ifdef WIN32
-    std::ofstream ofs("C:\\Users\\DanK\\MProject\\data\\matches.txt");
+    std::ofstream ofs("C:\\Users\\DanK\\MProject\\data\\Results\\matches.txt");
   #else
-    std::ofstream ofs("/Users/dkostro/Projects/MProject/data/US/log/matches.txt");
+    std::ofstream ofs("/Users/dkostro/Projects/MProject/data/US/Results/matches.txt");
   #endif
   for(int i=0; i < m.size(); i++)
   {
@@ -2172,5 +2190,49 @@ void vtkSlicerSurfFeaturesLogic::writeMatches()
     }
   }
   ofs.close();
+  
+  // writes a matlab file with plane positions
+  #ifdef WIN32
+    ofs.open("C:\\Users\\DanK\\MProject\\data\\Results\\planePositions.txt");
+  #else
+    ofs.open("/Users/dkostro/Projects/MProject/data/US/Results/planePositions.txt");
+  #endif
+  std::vector<double> qx, qy, qz;
+  std::vector<double> tx, ty, tz;
+  std::vector<double> cornersTrain;
+  for(int i=0; i<queryImages.size(); i++) {
+    vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
+    getVtkMatrixFromVector(this->queryImagesTransform[i], transform);
+    vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
+    combinedTransform->Concatenate(transform);
+    combinedTransform->Concatenate(this->ImageToProbeTransform);
+    vtkSmartPointer<vtkMatrix4x4> groundTruth = vtkSmartPointer<vtkMatrix4x4>::New();
+    groundTruth = combinedTransform->GetMatrix();
+    std::vector<vnl_double_3> vec;
+    computeCorners(vec, groundTruth, queryImages[i].cols, queryImages[i].rows);
+    qx.push_back(vec[0][0]); qx.push_back(vec[1][0]); qx.push_back(vec[2][0]); qx.push_back(vec[3][0]);
+    qy.push_back(vec[0][1]); qy.push_back(vec[1][1]); qy.push_back(vec[2][1]); qy.push_back(vec[3][1]);
+    qz.push_back(vec[0][2]); qz.push_back(vec[1][2]); qz.push_back(vec[2][2]); qz.push_back(vec[3][2]);
+  }
+  
+  for(int i=0; i<trainImages.size(); i++) {
+    vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
+    getVtkMatrixFromVector(this->trainImagesTransform[i], transform);
+    vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
+    combinedTransform->Concatenate(transform);
+    combinedTransform->Concatenate(this->ImageToProbeTransform);
+    vtkSmartPointer<vtkMatrix4x4> groundTruth = vtkSmartPointer<vtkMatrix4x4>::New();
+    groundTruth = combinedTransform->GetMatrix();
+    std::vector<vnl_double_3> vec;
+    computeCorners(vec, groundTruth, trainImages[i].cols, trainImages[i].rows);
+    tx.push_back(vec[0][0]); tx.push_back(vec[1][0]); tx.push_back(vec[2][0]); tx.push_back(vec[3][0]);
+    ty.push_back(vec[0][1]); ty.push_back(vec[1][1]); ty.push_back(vec[2][1]); ty.push_back(vec[3][1]);
+    tz.push_back(vec[0][2]); tz.push_back(vec[1][2]); tz.push_back(vec[2][2]); tz.push_back(vec[3][2]);
+  }
+  
+  writeVarForMatlab(ofs,"qx",qx); writeVarForMatlab(ofs,"qy",qy); writeVarForMatlab(ofs,"qz",qz);
+  writeVarForMatlab(ofs,"tx",tx); writeVarForMatlab(ofs,"ty",ty); writeVarForMatlab(ofs,"tz",tz);
+  
+  
 }
 
