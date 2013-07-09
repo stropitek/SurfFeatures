@@ -136,17 +136,17 @@ int main (int argc, char const *argv[])
 
   std::vector<int> minHessians;
   std::vector<float> ransacMargins;
-  minHessians.push_back(300);
-  minHessians.push_back(200);
+  // minHessians.push_back(300);
+  // minHessians.push_back(200);
   minHessians.push_back(400);
-  minHessians.push_back(500);
-  minHessians.push_back(600);
+  // minHessians.push_back(500);
+  // minHessians.push_back(600);
   
-  ransacMargins.push_back(1.0);
+  // ransacMargins.push_back(1.0);
   ransacMargins.push_back(1.5);
-  ransacMargins.push_back(2.0);
-  ransacMargins.push_back(2.5);
-  ransacMargins.push_back(3.0);
+  // ransacMargins.push_back(2.0);
+  // ransacMargins.push_back(2.5);
+  // ransacMargins.push_back(3.0);
 
   int repetitions = 20;
 
