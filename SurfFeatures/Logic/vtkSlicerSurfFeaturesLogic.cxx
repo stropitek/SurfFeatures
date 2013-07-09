@@ -1165,6 +1165,8 @@ void vtkSlicerSurfFeaturesLogic::ProcessMRMLNodesEvents( vtkObject* caller, unsi
   {
     return;
   }
+  if(!this->registering)
+    return;
   if(event == vtkMRMLVolumeNode::ImageDataModifiedEvent)
   {
     this->console->insertPlainText("New ImageDataModifiedEvent\n");
