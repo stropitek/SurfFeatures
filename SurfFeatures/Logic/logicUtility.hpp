@@ -1,3 +1,5 @@
+#ifndef LOGIC_UTILITY_H
+#define LOGIC_UTILITY_H
 void writeVarForMatlab(std::ofstream& ofs, std::string name, int var)
 {
   ofs << name << " %d 1 " << var << std::endl;
@@ -57,3 +59,5 @@ void writeVarForMatlab(std::ofstream& ofs, std::string name, std::vector<std::st
   }
   ofs << std::endl;
 }
+
+#endif
