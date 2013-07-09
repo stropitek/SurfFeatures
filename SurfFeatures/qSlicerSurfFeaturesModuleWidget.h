@@ -44,6 +44,9 @@ public:
   virtual ~qSlicerSurfFeaturesModuleWidget();
 
 public slots:
+
+  void onInputVolumeSelect(vtkMRMLNode*);
+
   void onRansacMarginChanged(double);
   void onMinHessianChanged(int);
 

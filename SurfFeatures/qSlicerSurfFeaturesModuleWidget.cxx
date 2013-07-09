@@ -96,6 +96,8 @@ void qSlicerSurfFeaturesModuleWidget::setup()
   Q_D(qSlicerSurfFeaturesModuleWidget);
   d->setupUi(this);
   this->Superclass::setup();
+  
+  connect(d->inputVolumeNodeComboBox, SIGNAL(currentNodeChanged(vtkMRMLNode*)), this, SLOT(onInputVolumeSelect(vtkMRMLNode*)));
 
   connect(d->ransacMarginSpinBox, SIGNAL(valueChanged(double)), this, SLOT(onRansacMarginChanged(double)));
   connect(d->minHessianSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onMinHessianChanged(int)));
@@ -146,6 +148,14 @@ void qSlicerSurfFeaturesModuleWidget::setup()
 
 }
 
+void qSlicerSurfFeaturesModuleWidget::onInputVolumeSelect(vtkMRMLNode* node)
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  Q_ASSERT(d->InputVolumeComboBox);
+  vtkSlicerSurfFeaturesLogic* logic = d->logic();
+  vtkMRMLScalarVolumeNode* snode = vtkMRMLScalarVolumeNode::SafeDownCast(node);
+  logic->setObservedVolume(snode);
+}
 
 SLOTDEF_1(int,onMinHessianChanged, setMinHessian);
 SLOTDEF_1(double, onRansacMarginChanged, setRansacMargin);
