@@ -974,7 +974,7 @@ void writeMatlabFile(const std::vector<vnl_double_3>& queryPoints, const std::ve
   
   
 
-  matlabof << "res = 40;\n"                                                                         ;
+  matlabof << "res = 100;\n"                                                                        ;
   matlabof << "h(1)=ezmesh(gfunc, [min(cornerXg) max(cornerXg) min(cornerYg) max(cornerYg)],res);\n";
   matlabof << "h(2)=ezmesh(efunc, [min(cornerXe) max(cornerXe) min(cornerYe) max(cornerYe)],res);\n";
   matlabof << "colormap([0,1,0;1,0,0]);\n"                                                          ;
@@ -1837,6 +1837,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
 
 
   this->matchNode->SetAndObserveImageData(this->matchImageData);
+  // Makes a deep copy of the matrix
   this->matchNode->SetIJKToRASMatrix(estimate);
 
   if(this->GetMRMLScene()) {
