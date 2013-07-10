@@ -1748,8 +1748,8 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     trainCentroid += projTrainPoints[inliersIdx[i]];
     queryCentroid += queryPoints[inliersIdx[i]];
   }
-  trainCentroid /= queryPoints.size();
-  queryCentroid /= queryPoints.size();
+  trainCentroid /= inliersIdx.size();
+  queryCentroid /= inliersIdx.size();
 
   // Now we still have to figure out a translation component. Calculate the centroids of query and train keypoints and make them match
   vnl_double_3 t;
