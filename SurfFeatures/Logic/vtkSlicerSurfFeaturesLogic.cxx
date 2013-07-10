@@ -1569,9 +1569,11 @@ void vtkSlicerSurfFeaturesLogic::updateQueryNode()
   // You've got to keep a reference of that vtkimage data somewhere, because the node does not make a deep copy in SetAndObserveImageData
   this->queryImageData = importer->GetOutput();
 
+  // Makes a deep copy of the matrix
+  this->queryNode->SetIJKToRASMatrix(matrix);
   // vtkImage shares pointer with opencv image
   this->queryNode->SetAndObserveImageData(this->queryImageData);
-  this->queryNode->SetIJKToRASMatrix(matrix);
+  
 
   if(this->GetMRMLScene()) {
     if(!this->GetMRMLScene()->IsNodePresent(this->queryNode))
@@ -1608,8 +1610,11 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNode()
 
 
   this->queryImageData = importer->GetOutput();
-  this->matchNode->SetAndObserveImageData(this->matchImageData);
+  
+  // Makes a deep copy of the matrix
   this->matchNode->SetIJKToRASMatrix(matrix);
+  // vtkImage shares pointer with opencv image
+  this->matchNode->SetAndObserveImageData(this->matchImageData);
 
   if(this->GetMRMLScene()) {
     if(!this->GetMRMLScene()->IsNodePresent(this->matchNode))
@@ -1835,10 +1840,10 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   importer->Update();
   this->matchImageData = importer->GetOutput();
 
-
-  this->matchNode->SetAndObserveImageData(this->matchImageData);
   // Makes a deep copy of the matrix
   this->matchNode->SetIJKToRASMatrix(estimate);
+  // vtkImage shares pointer with opencv image
+  this->matchNode->SetAndObserveImageData(this->matchImageData);
 
   if(this->GetMRMLScene()) {
     if(!this->GetMRMLScene()->IsNodePresent(this->matchNode))
@@ -2026,9 +2031,11 @@ void vtkSlicerSurfFeaturesLogic::showCropFirstImage()
   vtkSmartPointer<vtkMatrix4x4> matrix = vtkSmartPointer<vtkMatrix4x4>::New();
   matrix->Identity();
 
-  // Pointer is shared with the opencv image
-  this->queryNode->SetAndObserveImageData(vtkImage);
+  // Makes a deep copy of the matrix
   this->queryNode->SetIJKToRASMatrix(matrix);
+  // vtkImage shares pointer with opencv image
+  this->queryNode->SetAndObserveImageData(vtkImage);
+  
 
   if(this->GetMRMLScene()) {
     if(!this->GetMRMLScene()->IsNodePresent(this->queryNode))
