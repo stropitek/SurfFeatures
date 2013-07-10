@@ -581,6 +581,8 @@ void readImages_mha(const std::string& filename, std::vector<cv::Mat>& images, i
        fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
        images.push_back( mtImgNew );
      }
+     else if(i>=firstFrame && i<=lastFrame && !transformsValidity[i])
+       fseek(infile, iImgRows*iImgCols, SEEK_CUR);
      else if(i>lastFrame)
        break;
    }
