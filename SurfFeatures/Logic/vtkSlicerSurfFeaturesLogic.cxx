@@ -573,8 +573,13 @@ void readImages_mha(const std::string& filename, std::vector<cv::Mat>& images, i
    void *ptr = NULL;
    for( int i = 0; i < iImgCount; i++ )
    {
-     if(i<firstFrame)
-       fseek(infile, iImgRows*iImgCols, SEEK_CUR);
+     if(i<firstFrame) {
+       #ifdef WIN32
+       _fseeki64(infile, (__int64)iImgRows*(__int64)iImgCols, SEEK_CUR);
+       #else
+       fseek(infile, (long int)iImgRows*(long int)iImgCols, SEEK_CUR);
+       #endif
+     }
      else if(i>=firstFrame && i <= lastFrame && transformsValidity[i]) {
        Mat mtImgNew = mtImg.clone();
        fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
