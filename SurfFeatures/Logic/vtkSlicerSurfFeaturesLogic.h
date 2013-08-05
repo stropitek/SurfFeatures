@@ -236,6 +236,7 @@ private:
   vtkSmartPointer<vtkImageData> queryImageData;
   vtkSmartPointer<vtkImageData> matchImageData;
 
+  std::string maskFile;
   cv::Mat mask;
   cv::Mat croppedMask;
 
@@ -308,6 +309,7 @@ public:
   GET(std::string, queryFile, QueryFile);
   GET(std::string, trainFile, TrainFile);
   GET(std::string, bogusFile, BogusFile);
+  GET(std::string, maskFile, MaskFile);
   
   GETSET(int, trainStartFrame, TrainStartFrame);
   GETSET(int, trainStopFrame, TrainStopFrame);
@@ -329,12 +331,18 @@ public:
   GETSET(double, cropRatios[1], RightCrop);
   GETSET(double, cropRatios[2], TopCrop);
   GETSET(double, cropRatios[3], BottomCrop);
+  void setCropRatios(float ratios[4]);
+  void setMaskFile(std::string);
   
   // Results
   GET(std::vector<int>, iInliers, IInliers);
   GET(std::vector<int>, iOutliers, IOutliers);
   GET(std::vector<double>, matchDistances, MatchDistances);
   GET(std::vector<double>, planeDistances, PlaneDistances);
+
+  // Get opencv stuff
+  GET(std::vector<std::vector<cv::KeyPoint> >, queryKeypoints, QueryKeypoints);
+  GET(std::vector<cv::Mat>,queryDescriptors, QueryDescriptors);
 };
 
 

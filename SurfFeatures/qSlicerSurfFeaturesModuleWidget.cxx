@@ -18,6 +18,7 @@
 // Qt includes
 #include <QDebug>
 #include <QTimer>
+#include <QFileDialog>
 
 // SlicerQt includes
 #include "qSlicerSurfFeaturesModuleWidget.h"
@@ -147,7 +148,7 @@ void qSlicerSurfFeaturesModuleWidget::setup()
   connect(d->correspondenceTimer, SIGNAL(timeout()), this, SLOT(onCorrespondenceTimer()));
   
   connect(d->logMatchesButton, SIGNAL(clicked()), this, SLOT(onLogMatches()));
-
+  connect(d->maskFileButton, SIGNAL(clicked()), this, SLOT(onMaskFile()));
 
   // call some slots to make them effective from start
 
@@ -301,6 +302,16 @@ void qSlicerSurfFeaturesModuleWidget::onBogusPathChanged(const QString& path)
   logic->setBogusFile(path.toStdString());
 }
 
+void qSlicerSurfFeaturesModuleWidget::onMaskFile()
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  QString fileName = QFileDialog::getOpenFileName(this,
+     tr("Open Image"), "/home/maskfile", tr("Image Files (*.png *.jpg *.bmp)"));
+  std::string fn = fileName.toStdString();
+  if(!fn.empty())
+    d->logic()->setMaskFile(fn);
+}
+
 void qSlicerSurfFeaturesModuleWidget::updateParameters()
 {
   Q_D(qSlicerSurfFeaturesModuleWidget);
@@ -342,4 +353,5 @@ void qSlicerSurfFeaturesModuleWidget::updateParameters()
   d->queryPathLineEdit->setCurrentPath(logic->getQueryFile().c_str());
   
   d->minHessianSpinBox->setValue(logic->getMinHessian());
+  d->maskFileLabel->setText(logic->getMaskFile().c_str());
 }

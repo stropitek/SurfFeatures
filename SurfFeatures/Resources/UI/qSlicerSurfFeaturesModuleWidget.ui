@@ -538,6 +538,31 @@
           </item>
          </layout>
         </item>
+        <item row="11" column="0">
+         <widget class="QLabel" name="label_20">
+          <property name="text">
+           <string>Mask File:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="11" column="1">
+         <layout class="QHBoxLayout" name="maskFileHLayout">
+          <item>
+           <widget class="QLabel" name="maskFileLabel">
+            <property name="text">
+             <string>None</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="maskFileButton">
+            <property name="text">
+             <string>Select Mask</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
        </layout>
       </item>
       <item>

@@ -1033,6 +1033,13 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->setQueryFile("/Users/dkostro/Projects/MProject/data/US/decemberUS/TrackedImageSequence_20121211_095535.mha");
   #endif
 
+  // Load mask
+  #ifdef WIN32
+  this->setMaskFile("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\mask.bmp");
+  #else
+  this->setMaskFile("/Users/dkostro/Projects/MProject/data/US/masks/mask.bmp");
+  #endif
+
   this->bogusStartFrame = 0;
   this->bogusStopFrame = 2;
   this->trainStartFrame = 0;
@@ -1051,13 +1058,7 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->console = NULL;
   this->playDirection = 1;
 
-  // Load mask
-  #ifdef WIN32
-  this->mask = cv::imread("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\mask.bmp",CV_LOAD_IMAGE_GRAYSCALE);
-  #else
-  this->mask = cv::imread("/Users/dkostro/Projects/MProject/data/US/masks/mask.bmp", CV_LOAD_IMAGE_GRAYSCALE);
-  #endif
-
+  
   // Initialize Image to Probe transform
   this->ImageToProbeTransform = vtkSmartPointer<vtkMatrix4x4>::New();
   this->ImageToProbeTransform->Identity();
@@ -2246,3 +2247,18 @@ void vtkSlicerSurfFeaturesLogic::writeMatches()
   
 }
 
+void vtkSlicerSurfFeaturesLogic::setCropRatios(float ratios[4])
+{
+  this->cropRatios[0] = ratios[0];
+  this->cropRatios[1] = ratios[1];
+  this->cropRatios[2] = ratios[2];
+  this->cropRatios[3] = ratios[3];
+}
+
+void vtkSlicerSurfFeaturesLogic::setMaskFile(std::string file)
+{
+
+  this->maskFile = file;
+  this->mask = cv::imread(this->maskFile, CV_LOAD_IMAGE_GRAYSCALE);
+  this->Modified();
+}

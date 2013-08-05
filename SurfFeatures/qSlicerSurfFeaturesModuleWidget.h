@@ -87,6 +87,7 @@ public slots:
   void onCorrespondenceTimer();
 
   void onLogMatches();
+  void onMaskFile();
 
 protected:
   QScopedPointer<qSlicerSurfFeaturesModuleWidgetPrivate> d_ptr;
