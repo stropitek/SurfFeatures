@@ -1,46 +1,6 @@
 #include "vtkSlicerSurfFeaturesLogic.h"
 #include "logicUtility.hpp"
-
-void computeAll(vtkSlicerSurfFeaturesLogic* surf)
-{
-  surf->computeBogus();
-  surf->computeTrain();
-  surf->computeQuery();
-
-  // Compute bogus
-  while(true)
-  {
-    if(!surf->isBogusLoading())
-      break;
-    surf->computeNextBogus();
-  }
-
-  // Compute Train
-  while(true)
-  {
-    if(!surf->isTrainLoading())
-      break;
-    surf->computeNextTrain();
-  }
-
-  // Compute query
-  while(true)
-  {
-    if(!surf->isQueryLoading())
-      break;
-    surf->computeNextQuery();
-  }
-
-  // Compute correspondences
-  surf->startInterSliceCorrespondence();
-  while(true)
-  {
-    if(!surf->isCorrespondenceComputing())
-      break;
-    surf->computeNextInterSliceCorrespondence();
-  }  
-}
-
+#include "surfLogicUtility.hpp"
 
 
 int main (int argc, char const *argv[])
@@ -80,8 +40,8 @@ int main (int argc, char const *argv[])
   std::vector<int> minHessians;
   std::vector<float> ransacMargins;
   // minHessians.push_back(300);
-  // minHessians.push_back(200);
   minHessians.push_back(400);
+  //minHessians.push_back(400);
   // minHessians.push_back(500);
   // minHessians.push_back(600);
   
