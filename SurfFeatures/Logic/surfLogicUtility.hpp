@@ -53,4 +53,47 @@ void computeAll(vtkSlicerSurfFeaturesLogic* surf)
   }  
 }
 
+// Reads lines from a file into a vector
+void readLines( const string& filename, vector<string>& lines )
+{
+    const char dlmtr = '/';
+
+    lines.clear();
+
+    ifstream file( filename.c_str() );
+    if ( !file.is_open() )
+        return;
+
+    while( !file.eof() )
+    {
+        string str; getline( file, str );
+        if( str.empty() ) break;
+        lines.push_back(str);
+    }
+    file.close();
+}
+
+// Get the directory given a filename.
+void splitDir(const std::string& filename, std::string& dir, std::string& file, string& ext)
+{
+  #ifdef WIN32
+  const char dlmtr = '\\';
+  #else
+  const char dlmtr = '/';
+  #endif
+
+  size_t pos = filename.rfind(dlmtr);
+  dir = pos == string::npos ? "" : filename.substr(0, pos) + dlmtr;
+  file = pos == string::npos ? "" : filename.substr(pos+1);
+
+  if(file.empty()){
+    ext=""; return;
+  }
+
+  pos = file.find_last_of(".");
+  ext = pos == string::npos ? "" : file.substr(pos+1);
+  file = pos == string::npos ? file : file.substr(0,pos);
+
+}
+
 #endif

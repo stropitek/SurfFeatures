@@ -18,6 +18,7 @@ limitations under the License.
 // SurfFeatures Logic includes
 #include "vtkSlicerSurfFeaturesLogic.h"
 #include "logicUtility.hpp"
+#include "surfLogicUtility.hpp"
 
 // MRML includes 
 
@@ -37,6 +38,7 @@ limitations under the License.
 #include <stdio.h>
 #include <iostream>
 #include <math.h>
+#include <fstream>
 
 // MRML includes
 #include <vtkMRMLVolumeNode.h>
@@ -481,6 +483,7 @@ void readImageTransforms_mha(const std::string& filename, std::vector<std::vecto
   std::string dirName = getDir(filename);
   filenames.clear();
   transforms.clear();
+  transformsValidity.clear();
   
   // Vector for reading in transforms
   vector< float > vfTrans;
@@ -540,14 +543,14 @@ void readImageTransforms_mha(const std::string& filename, std::vector<std::vecto
   }
 }
 
-void readImages_mha(const std::string& filename, std::vector<cv::Mat>& images, int& firstFrame, int& lastFrame, const std::vector<bool>& transformsValidity)
-{
+void readImages_mha(const std::string& filename, std::vector<cv::Mat>& images, std::vector<int> frames)
+{ 
   int iImgCols = -1;
   int iImgRows = -1;
   int iImgCount = -1;
   if(readImageDimensions_mha(filename, iImgCols, iImgRows, iImgCount))
     return;
-  
+
   FILE *infile = fopen( filename.c_str(), "rb" );
    char buffer[400];
    while( fgets( buffer, 400, infile ) )
@@ -562,46 +565,31 @@ void readImages_mha(const std::string& filename, std::vector<cv::Mat>& images, i
    unsigned char *pucImgData = new unsigned char[iImgRows*iImgCols];
    Mat mtImg(iImgRows, iImgCols, CV_8UC1, pucImgData);
 
-   if(firstFrame < 0)
-     firstFrame = 0;
-   if(firstFrame >= iImgCount)
-     firstFrame = iImgCount-1;
-   if(lastFrame < 0 || lastFrame >= iImgCount)
-     lastFrame = iImgCount-1;
-   if(firstFrame > lastFrame)
-     firstFrame = lastFrame;
    // Read & write images
+   // frames should be ordered ascendant
    void *ptr = NULL;
-   for( int i = 0; i < iImgCount; i++ )
+   int lastFrame = 0;
+   for( int i = 0; i < frames.size(); i++ )
    {
-     if(i<firstFrame) {
-       #ifdef WIN32
-       _fseeki64(infile, (__int64)iImgRows*(__int64)iImgCols, SEEK_CUR);
-       #else
-       fseek(infile, (long int)iImgRows*(long int)iImgCols, SEEK_CUR);
-       #endif
-     }
-     else if(i>=firstFrame && i <= lastFrame && transformsValidity[i]) {
-       Mat mtImgNew = mtImg.clone();
-       fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
-       images.push_back( mtImgNew );
-     }
-     else if(i>=firstFrame && i<=lastFrame && !transformsValidity[i]) {
-       #ifdef WIN32
-        _fseeki64(infile, (__int64)iImgRows*(__int64)iImgCols, SEEK_CUR);
-        #else
-        fseek(infile, (long int)iImgRows*(long int)iImgCols, SEEK_CUR);
-        #endif
-     }
-     else if(i>lastFrame)
-       break;
+     int skip = frames[i]-lastFrame;
+     #ifdef WIN32
+     _fseeki64(infile, (__int64)iImgRows*(__int64)iImgCols*(__int64)skip, SEEK_CUR);
+     #else
+     fseek(infile, (long int)iImgRows*(long int)iImgCols*(long int)skip, SEEK_CUR);
+     #endif
+
+     Mat mtImgNew = mtImg.clone();
+     fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
+     images.push_back( mtImgNew );
+
    }
    delete [] pucImgData;
    
    fclose( infile );
 }
 
-// Read in relevant lines from mha file, used with PLUS ultrasound data
+
+// Will read all the data form firstFrame to lastFrame, excluding all slices with invalid transform
 int read_mha(
   const string& filename,
   vector <Mat>& images,
@@ -609,26 +597,48 @@ int read_mha(
   vector< vector<float> >& transforms,
   vector<bool>& transformsValidity,
   int& firstFrame,
-  int& lastFrame
+  int& lastFrame,
+  std::vector<int>& frames
   )
 {
+  int iImgCols = -1;
+  int iImgRows = -1;
+  int iImgCount = -1;
+  if(readImageDimensions_mha(filename, iImgCols, iImgRows, iImgCount))
+    return 1;
+
+    if(firstFrame < 0)
+     firstFrame = 0;
+   if(firstFrame >= iImgCount)
+     firstFrame = iImgCount-1;
+   if(lastFrame < 0 || lastFrame >= iImgCount)
+     lastFrame = iImgCount-1;
+   if(firstFrame > lastFrame)
+     firstFrame = lastFrame;
 
   readImageTransforms_mha(filename, transforms, transformsValidity, filenames);
-  readImages_mha(filename, images, firstFrame, lastFrame, transformsValidity);
+  
     
   // Keep the transforms that are in the first-last range
   std::vector<std::vector<float> > allTransforms = transforms;
   std::vector<std::string> allFilenames = filenames;
+  std::vector<bool> allValidity = transformsValidity;
+  transformsValidity.clear();
   transforms.clear();
   filenames.clear();
+  frames.clear();
   
-  for(int i=0; i<transformsValidity.size(); i++) {
-    if(i<firstFrame || i>lastFrame  || !transformsValidity[i])
+  // Discarding data with invalid transform
+  for(int i=0; i<allValidity.size(); i++) {
+    if(i<firstFrame || i>lastFrame  || !allValidity[i])
       continue;
     transforms.push_back(allTransforms[i]);
     filenames.push_back(allFilenames[i]);
+    frames.push_back(firstFrame+i);
+    transformsValidity.push_back(true);
   }
-  transformsValidity = std::vector<bool>(transformsValidity.begin()+firstFrame, transformsValidity.begin()+lastFrame+1);
+
+  readImages_mha(filename, images, frames);
 
   std::cout << "Read images: " << images.size() << std::endl;
   std::cout << "Read transforms: " << transforms.size() << std::endl;
@@ -639,15 +649,51 @@ int read_mha(
 
 }
 
+int read_mha(
+  const string& filename,
+  vector <Mat>& images,
+  vector<string>& filenames,
+  vector< vector<float> >& transforms,
+  vector<bool>& transformsValidity,
+  std::vector<int> frames
+  )
+{
+  readImageTransforms_mha(filename, transforms, transformsValidity, filenames);
+  
+  std::vector<std::vector<float> > allTransforms = transforms;
+  std::vector<std::string> allFilenames = filenames;
+  std::vector<bool> allValidity = transformsValidity;
+  transformsValidity.clear();
+  transforms.clear();
+  filenames.clear();
+  
+  // Discarding data with invalid transform
+  for(int i=0; i<frames.size(); i++)
+  {
+    filenames.push_back(allFilenames[frames[i]]);
+    transformsValidity.push_back(allValidity[frames[i]]);
+    transforms.push_back(allTransforms[frames[i]]);
+  }
+
+  readImages_mha(filename, images, frames);
+
+  std::cout << "Read images: " << images.size() << std::endl;
+  std::cout << "Read transforms: " << transforms.size() << std::endl;
+  std::cout << "Read transforms validity: " << transformsValidity.size() << std::endl;
+  std::cout << "Read names: " << filenames.size() << std::endl;
+  
+  return 0;
+}
+
 
 void matchDescriptorsKNN( const Mat& queryDescriptors, vector<vector<DMatch> >& matches, Ptr<DescriptorMatcher>& descriptorMatcher, int k)
 {
   // Assumes training descriptors have already been added to descriptorMatcher
-  cout << "< Set train descriptors collection in the matcher and match query descriptors to them..." << endl;
+  //cout << "< Set train descriptors collection in the matcher and match query descriptors to them..." << endl;
     //descriptorMatcher->add( trainDescriptors );
   descriptorMatcher->knnMatch( queryDescriptors, matches, k );
   CV_Assert( queryDescriptors.rows == (int)matches.size() || matches.empty() );
-  cout << ">" << endl;
+  //cout << ">" << endl;
 }
 
 
@@ -1291,7 +1337,7 @@ void vtkSlicerSurfFeaturesLogic::computeBogus()
   this->setCorrespondenceProgress(0);
   this->setBogusProgress(0);
   this->readAndComputeFeaturesOnMhaFile(this->bogusFile, this->bogusImages, this->bogusImagesNames, \
-    this->bogusImagesTransform, this->bogusTransformsValidity, this->bogusKeypoints, this->bogusDescriptors, this->bogusDescriptorMatcher, this->bogusStartFrame, this->bogusStopFrame, "bogus");
+    this->bogusImagesTransform, this->bogusTransformsValidity, this->bogusKeypoints, this->bogusDescriptors, this->bogusDescriptorMatcher, this->bogusStartFrame, this->bogusStopFrame, this->bogusFrames, "bogus");
 }
 
 void vtkSlicerSurfFeaturesLogic::computeTrain()
@@ -1299,7 +1345,7 @@ void vtkSlicerSurfFeaturesLogic::computeTrain()
   this->setCorrespondenceProgress(0);
   this->setTrainProgress(0);
   this->readAndComputeFeaturesOnMhaFile(this->trainFile, this->trainImages, this->trainImagesNames, \
-    this->trainImagesTransform, this->trainTransformsValidity, this->trainKeypoints, this->trainDescriptors, this->trainDescriptorMatcher, this->trainStartFrame, this->trainStopFrame, "train");
+    this->trainImagesTransform, this->trainTransformsValidity, this->trainKeypoints, this->trainDescriptors, this->trainDescriptorMatcher, this->trainStartFrame, this->trainStopFrame, this->trainFrames, "train");
 }
 
 void vtkSlicerSurfFeaturesLogic::computeQuery()
@@ -1307,8 +1353,9 @@ void vtkSlicerSurfFeaturesLogic::computeQuery()
   this->setQueryProgress(0);
   this->setCorrespondenceProgress(0);
   this->readAndComputeFeaturesOnMhaFile(this->queryFile, this->queryImages, this->queryImagesNames, \
-    this->queryImagesTransform, this->queryTransformsValidity, this->queryKeypoints, this->queryDescriptors, this->queryDescriptorMatcher, this->queryStartFrame, this->queryStopFrame, "query");
+    this->queryImagesTransform, this->queryTransformsValidity, this->queryKeypoints, this->queryDescriptors, this->queryDescriptorMatcher, this->queryStartFrame, this->queryStopFrame, this->queryFrames, "query");
 }
+
 
 void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::string& file, std::vector<cv::Mat>& images,\
   std::vector<std::string>& imagesNames,\
@@ -1317,21 +1364,19 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
   std::vector<std::vector<cv::KeyPoint> >& keypoints,\
   std::vector<cv::Mat>& descriptors,\
   cv::Ptr<cv::DescriptorMatcher> descriptorMatcher,\
-  int& startFrame, int& stopFrame, std::string who)
+  int& startFrame, int& stopFrame, std::vector<int>& frames, std::string who)
 {
   if(!this->cropRatiosValid())
     return;
   const char* pch = &(file)[0];
   // Read images
-  if( strstr( pch, ".mha" ) ){
-    images.clear();
-    imagesNames.clear();
-    imagesTransform.clear();
-    transformsValidity.clear();
-    if( read_mha( file, images, imagesNames, imagesTransform, transformsValidity, startFrame, stopFrame) )
-      return;
-  }
-  else
+  if( !strstr( pch, ".mha" ) )
+    return;
+  images.clear();
+  imagesNames.clear();
+  imagesTransform.clear();
+  transformsValidity.clear();
+  if( read_mha( file, images, imagesNames, imagesTransform, transformsValidity, startFrame, stopFrame, frames) )
     return;
     
   // Compute keypoints and descriptors
@@ -2079,6 +2124,7 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
     inliersIdx.push_back(0);
     inliersIdx.push_back(1);
     inliersIdx.push_back(2);
+    cout << "0 mm error, 3 inliers, 0 outliers." << endl;
     return 0;
   }
   else if(points.size()<3)
@@ -2169,6 +2215,8 @@ int vtkSlicerSurfFeaturesLogic::ransac(const std::vector<vnl_double_3>& points, 
       inliersIdx = tmpInliers;
     }
   }
+  if(planePointsIdx.size() == 0)
+    return 1;
   inliersIdx.push_back(planePointsIdx[0]);
   inliersIdx.push_back(planePointsIdx[1]);
   inliersIdx.push_back(planePointsIdx[2]);
@@ -2271,4 +2319,116 @@ void vtkSlicerSurfFeaturesLogic::setMaskFile(std::string file)
   this->maskFile = file;
   this->mask = cv::imread(this->maskFile, CV_LOAD_IMAGE_GRAYSCALE);
   this->Modified();
+}
+
+void vtkSlicerSurfFeaturesLogic::writeKeypointsAndDescriptors(std::string directory)
+{
+  if(this->isQueryLoading())
+    return;
+
+  cv::FileStorage fileList((directory+"info.yml").c_str(), cv::FileStorage::WRITE);
+  vector<string> flist;
+  for(int j=0; j<this->queryKeypoints.size(); j++)
+  {
+    std::string outputFile = directory + this->queryImagesNames[j];
+    std::string dir,file,ext;
+    splitDir(this->queryImagesNames[j],dir,file,ext);
+    outputFile = directory + file + ".yml";
+    flist.push_back(outputFile);
+    cout << outputFile << endl;
+    cv::FileStorage fs(outputFile.c_str(), cv::FileStorage::WRITE);
+    cv::write(fs,"keypoints",this->queryKeypoints[j]);
+    cv::write(fs,"descriptors",this->queryDescriptors[j]);
+    fs.release();
+  }
+  vector<float> cropRatios_vec;
+  for(int i=0;i<4;i++) cropRatios_vec.push_back(this->cropRatios[i]);
+  cv::write(fileList, "fileList", flist);
+  cv::write(fileList, "mhaFile", this->queryFile);
+  cv::write(fileList, "minHessian", this->minHessian);
+  cv::write(fileList, "cropRatios", cropRatios_vec);
+  cv::write(fileList, "frames", this->queryFrames);
+  cv::write(fileList, "maskFile", this->maskFile);
+  
+}
+
+void vtkSlicerSurfFeaturesLogic::loadKeypointsAndDescriptors(std::string directory, string who)
+{
+  if(who == "bogus")
+    this->loadKeypointsAndDescriptors(directory, this->bogusImages, this->bogusImagesTransform,\
+    this->bogusTransformsValidity, this->bogusImagesNames, this->bogusFrames, this->bogusFile,\
+    this->bogusKeypoints, this->bogusDescriptors);
+  else if(who == "train")
+    this->loadKeypointsAndDescriptors(directory, this->trainImages, this->trainImagesTransform,\
+    this->trainTransformsValidity, this->trainImagesNames, this->trainFrames, this->trainFile,\
+    this->trainKeypoints, this->trainDescriptors);
+  else if(who == "query")
+    this->loadKeypointsAndDescriptors(directory, this->queryImages, this->queryImagesTransform,\
+    this->queryTransformsValidity, this->queryImagesNames, this->queryFrames, this->queryFile,\
+    this->queryKeypoints, this->queryDescriptors);
+}
+
+void vtkSlicerSurfFeaturesLogic::loadKeypointsAndDescriptors(string directory, \
+                                                             vector<cv::Mat>& images, \
+                                                             vector<vector<float> >& transforms,\
+                                                             vector<bool>& transformsValidity,\
+                                                             vector<string>& imagesNames,\
+                                                             vector<int>& frames, string file,\
+                                                             vector<vector<cv::KeyPoint> >& keypoints,\
+                                                             vector<cv::Mat>& descriptors)
+{
+  cv::FileStorage info(directory+"info.yml", cv::FileStorage::READ);
+  vector<string> fileList;
+  vector<float> cropRatios_vec;
+  string mFile;
+  if(info.isOpened())
+  {
+    cv::read(info["fileList"], fileList);
+    cv::read(info["mhaFile"], file, "");
+    cv::read(info["cropRatios"], cropRatios_vec);
+    cv::read(info["minHessian"], this->minHessian, 400);
+    cv::read(info["frames"], frames);
+    cv::read(info["maskFile"], mFile, "");
+  }
+
+  for(int i=0;i<4;i++) this->cropRatios[i]=cropRatios_vec[i];
+  images.clear();
+  keypoints.clear();
+  descriptors.clear();
+
+  // this will override the previously present values
+  read_mha(file, images, imagesNames, transforms, transformsValidity, frames);
+
+  // Crop the mask
+  this->setMaskFile(mFile);
+  this->croppedMask = this->mask.clone();
+  cropData(this->croppedMask, this->cropRatios);
+  // Compute centroid
+  computeCentroid(this->croppedMask, this->xcentroid, this->ycentroid);
+  
+  for(int i=0; i<images.size(); i++)
+  {
+    cropData(images[i], this->cropRatios);
+  }
+
+  for(int i=0; i<fileList.size(); i++)
+  {
+    cv::FileStorage fs(directory+fileList[i], cv::FileStorage::READ);
+    if(fs.isOpened())
+    {
+      keypoints.push_back(vector<cv::KeyPoint>());
+      descriptors.push_back(cv::Mat());
+      cv::read(fs["keypoints"], keypoints[i]);
+      cv::read(fs["descriptors"], descriptors[i]);
+      // The write function does not write data for invalid transforms.
+      transformsValidity.push_back(true);
+    }
+    fs.release();
+  }
+ 
+}
+
+void vtkSlicerSurfFeaturesLogic::setImageToProbeTransform(vtkMatrix4x4* matrix)
+{
+  this->ImageToProbeTransform->DeepCopy(matrix);
 }

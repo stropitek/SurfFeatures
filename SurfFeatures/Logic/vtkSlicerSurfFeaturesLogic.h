@@ -156,6 +156,8 @@ public:
   void resetResults();
   void computeNextInterSliceCorrespondence();
   void simulateAll();
+  void writeKeypointsAndDescriptors(std::string);
+  void loadKeypointsAndDescriptors(std::string directory,std::string who);
 
   // Private helpers
 private:
@@ -170,7 +172,16 @@ private:
                                        std::vector<std::vector<cv::KeyPoint> >& keypoints,\
                                        std::vector<cv::Mat>& descriptors,\
                                        cv::Ptr<cv::DescriptorMatcher> descriptorMatcher,\
-                                       int& startFrame, int& stopFrame, std::string who);
+                                       int& startFrame, int& stopFrame, std::vector<int>& frames, std::string who);
+
+void loadKeypointsAndDescriptors(string directory,\
+                                 vector<cv::Mat>& images,\
+                                 vector<vector<float> >& transforms,\
+                                 vector<bool>& transformsValidity,\
+                                 vector<string>& imageNames,\
+                                 vector<int>& frames, string file,\
+                                 vector<vector<cv::KeyPoint> >& keypoints,\
+                                 vector<cv::Mat>& descriptors);
 
   // ================================================
   // Other
@@ -200,6 +211,7 @@ private:
   int currentImgIndex;
 
   // train images, keypoints, descriptors and matcher
+  std::vector<int> trainFrames;
   std::vector<cv::Mat> trainImages;
   std::vector<std::string> trainImagesNames;
   std::vector< std::vector<float> > trainImagesTransform;
@@ -211,6 +223,7 @@ private:
   
 
   // bogus images, keypoints, descriptors and matcher
+  std::vector<int> bogusFrames;
   std::vector<cv::Mat> bogusImages;
   std::vector<std::string> bogusImagesNames;
   std::vector< std::vector<float> > bogusImagesTransform;
@@ -220,6 +233,7 @@ private:
   cv::Ptr<cv::DescriptorMatcher> bogusDescriptorMatcher;
 
   // query images, keypoints, descriptors and matcher
+  std::vector<int> queryFrames;
   std::vector<cv::Mat> queryImages;
   std::vector<std::string> queryImagesNames;
   std::vector< std::vector<float> > queryImagesTransform;
@@ -298,6 +312,7 @@ public:
 
   void setMinHessian(int);
   int getMinHessian();
+  void setImageToProbeTransform(vtkMatrix4x4* matrix);
 
   // parameter setters and getters
   GET(QTextEdit*,console,Console);
@@ -326,6 +341,9 @@ public:
   void setTrainProgress(int p);
   void setBogusProgress(int p);
   void setCorrespondenceProgress(int p);
+
+  GET(vector<vector<float> >, queryImagesTransform, QueryImagesTransform);
+  GET(vector<bool>, queryTransformsValidity, QueryTransformsValidity);
 
   GETSET(double, cropRatios[0], LeftCrop);
   GETSET(double, cropRatios[1], RightCrop);

@@ -37,5 +37,8 @@ foreach (_variableName ${_variableNames})
   message(STATUS "${_variableName}=${${_variableName}}")
 endforeach()
 
-add_executable(surfcmd surfcmd.cxx)
+add_executable(surfcmd surfcmd.cxx logicUtility.hpp surfLogicUtility.hpp)
 target_link_libraries(surfcmd ${KIT})
+
+add_executable(testcmd testcmd.cxx surfLogicUtility.hpp)
+target_link_libraries(testcmd ${KIT})

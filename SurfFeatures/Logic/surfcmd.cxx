@@ -6,16 +6,21 @@
 int main (int argc, char const *argv[])
 {
   vtkSlicerSurfFeaturesLogic* surf = vtkSlicerSurfFeaturesLogic::New();
-
+  surf->setMaskFile("C:\\Users\\DanK\\MProject\\data\\MNI\\mni_mask.png");
+  float cropRatios[4] = {0.,1.,0.,1.};
+  surf->setCropRatios(cropRatios);
 
   // Parameters init
   std::vector<std::string> bogusFiles;
   std::vector<std::string> trainFiles;
   std::vector<std::string> queryFiles;
   #ifdef WIN32
-  bogusFiles.push_back("C:\\Users\\DanK\\MProject\\data\\US\\Plus_test\\TrackedImageSequence_20121210_162606.mha");
-  trainFiles.push_back("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha");
-  queryFiles.push_back("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha");
+  //bogusFiles.push_back("C:\\Users\\DanK\\MProject\\data\\US\\Plus_test\\TrackedImageSequence_20121210_162606.mha");
+  bogusFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\group1\\01\\pre\\sweep_1a\\sweep_1a.mha");
+  //trainFiles.push_back("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha");
+  trainFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\group1\\06\\pre\\sweep_6c\\sweep_6c.mha");
+  //queryFiles.push_back("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha";)
+  queryFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\group1\\06\\pre\\sweep_6d\\sweep_6d.mha");
   #else
   bogusFiles.push_back("/Users/dkostro/Projects/MProject/data/US/Plus_test/TrackedImageSequence_20121210_162606.mha");
   trainFiles.push_back("/Users/dkostro/Projects/MProject/data/US/decemberUS/TrackedImageSequence_20121211_095535.mha");
@@ -32,8 +37,8 @@ int main (int argc, char const *argv[])
   bogusStartFrames.push_back(0);
   bogusStopFrames.push_back(200);
   trainStartFrames.push_back(0);
-  trainStopFrames.push_back(902);
-  queryStartFrames.push_back(903);
+  trainStopFrames.push_back(-1);
+  queryStartFrames.push_back(0);
   queryStopFrames.push_back(-1);
 
 
@@ -51,7 +56,7 @@ int main (int argc, char const *argv[])
   // ransacMargins.push_back(2.5);
   // ransacMargins.push_back(3.0);
 
-  int repetitions = 20;
+  int repetitions = 1;
 
   int iFiles = bogusFiles.size();
   if(trainFiles.size()!=iFiles || queryFiles.size()!=iFiles || bogusStartFrames.size()!=iFiles || trainStartFrames.size()!=iFiles || queryStartFrames.size()!=iFiles || bogusStopFrames.size()!=iFiles || trainStopFrames.size()!=iFiles || queryStopFrames.size()!=iFiles) {
@@ -61,7 +66,7 @@ int main (int argc, char const *argv[])
 
   int count = 0;
   #ifdef WIN32
-  std::ofstream ofs("C:\\Users\\DanK\\MProject\\data\\Results\\surfResults.txt");
+  std::ofstream ofs("C:\\Users\\DanK\\MProject\\data\\Results\\preop_6c_6d.txt");
   #else
   std::ofstream ofs("/Users/dkostro/Projects/MProject/data/US/Results/surfResults.txt");
   #endif
@@ -69,7 +74,7 @@ int main (int argc, char const *argv[])
   {
     surf->setBogusFile(bogusFiles[i]);
     surf->setTrainFile(trainFiles[i]);
-    surf->setTrainFile(queryFiles[i]);
+    surf->setQueryFile(queryFiles[i]);
 
     surf->setBogusStartFrame(bogusStartFrames[i]);
     surf->setTrainStartFrame(trainStartFrames[i]);
