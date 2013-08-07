@@ -156,8 +156,8 @@ public:
   void resetResults();
   void computeNextInterSliceCorrespondence();
   void simulateAll();
-  void writeKeypointsAndDescriptors(std::string);
   void loadKeypointsAndDescriptors(std::string directory,std::string who);
+  void saveKeypointsAndDescriptors(std::string directory, std::string who);
 
   // Private helpers
 private:
@@ -179,9 +179,18 @@ void loadKeypointsAndDescriptors(string directory,\
                                  vector<vector<float> >& transforms,\
                                  vector<bool>& transformsValidity,\
                                  vector<string>& imageNames,\
-                                 vector<int>& frames, string file,\
+                                 vector<int>& frames, string& file,\
                                  vector<vector<cv::KeyPoint> >& keypoints,\
-                                 vector<cv::Mat>& descriptors);
+                                 vector<cv::Mat>& descriptors,\
+                                 const string& who);
+
+void saveKeypointsAndDescriptors(const string& directory,\
+                                 const string& file,\
+                                 const vector<int>& frames,\
+                                 const vector<string>& imagesNames,\
+                                 const vector<vector<cv::KeyPoint> >& keypoints,\
+                                 const vector<cv::Mat>& descriptors,\
+                                 const string& who);
 
   // ================================================
   // Other

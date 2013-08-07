@@ -12,7 +12,8 @@ int main()
   vector<string> outputDirs;
   readLines("C:\\Users\\DanK\\MProject\\data\\MNI\\mni_mha.txt",files);
   readLines("C:\\Users\\DanK\\MProject\\data\\MNI\\save_dirs.txt",outputDirs);
-  if(file.size() != outputDirs.size())
+
+  if(files.size() != outputDirs.size())
     return 0;
   for(int i=0; i<files.size(); i++)
   {
@@ -32,7 +33,7 @@ int main()
     computeQuery(surf);
     std::string dir, file, ext;
     splitDir(files[i],dir,file,ext);
-    surf->writeKeypointsAndDescriptors(outputDirs[i]);
+    surf->saveKeypointsAndDescriptors(outputDirs[i],"query");
     //surf->loadKeypointsAndDescriptors(outputDir, "query");
 
 

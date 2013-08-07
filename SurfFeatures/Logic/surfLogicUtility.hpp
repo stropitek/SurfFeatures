@@ -73,6 +73,22 @@ void readLines( const string& filename, vector<string>& lines )
     file.close();
 }
 
+// Normalize dir by adding the appropriate delimiter at the end, if not present
+void normalizeDir(std::string& dir)
+{
+  #ifdef WIN32
+  const char dlmtr = '\\';
+  #else
+  const char dlmtr = '/';
+  #endif
+
+  if(!dir.empty()){
+    if(*(dir.end()-1) != dlmtr)
+      dir = dir + dlmtr;
+  }
+
+}
+
 // Get the directory given a filename.
 void splitDir(const std::string& filename, std::string& dir, std::string& file, string& ext)
 {

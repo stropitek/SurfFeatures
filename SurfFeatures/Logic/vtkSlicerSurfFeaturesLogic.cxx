@@ -572,6 +572,7 @@ void readImages_mha(const std::string& filename, std::vector<cv::Mat>& images, s
    for( int i = 0; i < frames.size(); i++ )
    {
      int skip = frames[i]-lastFrame;
+     lastFrame = frames[i]+1;
      #ifdef WIN32
      _fseeki64(infile, (__int64)iImgRows*(__int64)iImgCols*(__int64)skip, SEEK_CUR);
      #else
@@ -890,6 +891,31 @@ double computeMeanDistance(const std::vector<vnl_double_3>& x1, const std::vecto
   return result;
 }
 
+vnl_double_3 computeTranslation(vnl_double_3 u, vnl_double_3 v, vnl_double_3 w, vnl_double_3 trainCentroid, vnl_double_3 queryCentroid)
+{
+  vnl_double_3 t;
+  t[0] = trainCentroid[0] - (u[0]*queryCentroid[0] + v[0]*queryCentroid[1] + w[0]*queryCentroid[2]);
+  t[1] = trainCentroid[1] - (u[1]*queryCentroid[0] + v[1]*queryCentroid[1] + w[1]*queryCentroid[2]);
+  t[2] = trainCentroid[2] - (u[2]*queryCentroid[0] + v[2]*queryCentroid[1] + w[2]*queryCentroid[2]);
+  return t;
+}
+
+void setEstimate(vtkMatrix4x4* estimate, const vnl_double_3& u, const vnl_double_3& v, const vnl_double_3& w, const vnl_double_3& t)
+{
+  estimate->SetElement(0,0,u[0]);
+  estimate->SetElement(1,0,u[1]);
+  estimate->SetElement(2,0,u[2]);
+  estimate->SetElement(0,1,v[0]);
+  estimate->SetElement(1,1,v[1]);
+  estimate->SetElement(2,1,v[2]);
+  estimate->SetElement(0,2,w[0]);
+  estimate->SetElement(1,2,w[1]);
+  estimate->SetElement(2,2,w[2]);
+  estimate->SetElement(0,3,t[0]);
+  estimate->SetElement(1,3,t[1]);
+  estimate->SetElement(2,3,t[2]);
+}
+
 void computeCentroid(const cv::Mat& mask, int& x, int& y)
 {
   float rowcentroid=0;
@@ -977,7 +1003,7 @@ void writeMatlabFile(const std::vector<vnl_double_3>& queryPoints, const std::ve
     if(j>0) {
       oss1 << ","; oss2 << ","; oss3 << ",";
     }
-    vnl_double_3 tqpoint = transformPoint(queryPoints[inliersIdx[j]], groundTruth);
+    vnl_double_3 tqpoint = transformPoint(queryPoints[inliersIdx[j]], estimate);
     oss1 << tqpoint[0];
     oss2 << tqpoint[1];
     oss3 << tqpoint[2];
@@ -1378,6 +1404,9 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
   transformsValidity.clear();
   if( read_mha( file, images, imagesNames, imagesTransform, transformsValidity, startFrame, stopFrame, frames) )
     return;
+  ostringstream oss;
+  oss << "Read " << frames.size() << " images for " << who << " data" << endl;
+  this->log(oss.str());
     
   // Compute keypoints and descriptors
   keypoints.clear();
@@ -1748,12 +1777,15 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   {
     projTrainPoints.push_back(projectPoint(trainPoints[i], plane, d));
   }
-  // In this plane normal vector we got wx,wy,wz figured out. Now we want ux,uy,uz
+  // In this plane normal vector we got vector w figured out. Now we want vector u
   int max_iter = 10000;
   int mult = 20;
   int iter = projTrainPoints.size()*mult<max_iter ? projTrainPoints.size()*mult : max_iter;
-  vnl_double_3 u(0,0,0);
-  vnl_double_3 v(0,0,0);
+  vnl_double_3 u1(0,0,0);
+  vnl_double_3 u2(0,0,0);
+  vector<double> u_thetas;
+  vector<double> v_thetas;
+  vnl_double_3 ref;
   for(int i=0; i<iter; i++)
   {
     // randomly get two inliers
@@ -1765,44 +1797,55 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     // compute the diff vector of the query keypoint locations
     vnl_double_3 queryDiff = queryPoints[inliersIdx[idx1]] - queryPoints[inliersIdx[idx2]];
     // Angle between the diff vector and the u unit vector
-    double theta = getAngle(vnl_double_3(1.0,0.0,0.0), queryDiff);
-    double theta_v = getAngle(vnl_double_3(0.0,1.0,0.0), queryDiff);
+    double x = getAngle(vnl_double_3(1.0,0.0,0.0),queryDiff);
+    double theta = atan2(queryDiff[1], queryDiff[0]);
   
     // compute the diff vector of the projected train keypoint locations
     vnl_double_3 trainDiff = projTrainPoints[inliersIdx[idx1]] - projTrainPoints[inliersIdx[idx2]];
+    if(i==0)
+      ref = trainDiff;
   
     // rotate this around normal vector by theta
-    vnl_matrix<double> rotationMatrix = getRotationMatrix(plane, theta);
-    vnl_matrix<double> rotationMatrix_v = getRotationMatrix(plane, theta_v);
-    vnl_double_3 u_i = convertVnlMatrixToVector(rotationMatrix*convertVnlVectorToMatrix(trainDiff));
-    vnl_double_3 v_i = convertVnlMatrixToVector(rotationMatrix_v*convertVnlVectorToMatrix(trainDiff));
-    u_i.normalize();
-    v_i.normalize();
-    v += v_i;
-    u += u_i;
+    vnl_matrix<double> rotationMatrix1 = getRotationMatrix(plane, theta);
+    vnl_matrix<double> rotationMatrix2 = getRotationMatrix(plane, -theta);
+    vnl_double_3 u_i_1 = convertVnlMatrixToVector(rotationMatrix1*convertVnlVectorToMatrix(trainDiff));
+    vnl_double_3 u_i_2 = convertVnlMatrixToVector(rotationMatrix2*convertVnlVectorToMatrix(trainDiff));
+    u_i_1.normalize();
+    u_i_2.normalize();
+    u1 += u_i_1;
+    u2 += u_i_2;
   }
+  u1 /= iter;
+  u2 /= iter;
   
   // We figure out v computing the cross product between u and w, 
   // v is just the cross product between u and w, but we computed v before to figure out the correct direction...
-  u /= iter;
-  v /= iter;
-  vnl_double_3 w = vnl_cross_3d(u,v);
-  if(dot_product(plane,w)>0)
-    w=-plane;
-  else
-    w=plane;
-  w.normalize();
-  u.normalize();
-  v.normalize();
-  v = vnl_cross_3d(u,w);
-  v.normalize();
+
+  // Two possible solutions
+  vnl_double_3 v1,w1,t1;
+  vnl_double_3 v2,w2,t2;
+
+  vtkSmartPointer<vtkMatrix4x4> estimate1 = vtkSmartPointer<vtkMatrix4x4>::New();
+  vtkSmartPointer<vtkMatrix4x4> estimate2 = vtkSmartPointer<vtkMatrix4x4>::New();
+  estimate1->Identity(); estimate2->Identity();
+
+  w1 = plane; w2 = -plane;
+  v1 = vnl_cross_3d(u1,w1);
+  v2 = vnl_cross_3d(u2,w2);
+
+  u1.normalize(); u2.normalize();
+  v1.normalize(); v2.normalize();
+  w1.normalize(); w2.normalize();
 
   // Scale
-  u *= 0.10763;
-  v *= 0.10530;
-  w *= 0.10646;
+  u1 *= 0.10763;
+  v1 *= 0.10530;
+  w1 *= 0.10646;
+  u2 *= 0.10763;
+  v2 *= 0.10530;
+  w2 *= 0.10646;
 
-
+  
   vnl_double_3 trainCentroid(0,0,0);
   vnl_double_3 queryCentroid(0,0,0);
   for(int i=0; i<inliersIdx.size(); i++) {
@@ -1812,40 +1855,46 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   trainCentroid /= inliersIdx.size();
   queryCentroid /= inliersIdx.size();
 
-  // Now we still have to figure out a translation component. Calculate the centroids of query and train keypoints and make them match
-  vnl_double_3 t;
-  t[0] = trainCentroid[0] - (u[0]*queryCentroid[0] + v[0]*queryCentroid[1] + w[0]*queryCentroid[2]);
-  t[1] = trainCentroid[1] - (u[1]*queryCentroid[0] + v[1]*queryCentroid[1] + w[1]*queryCentroid[2]);
-  t[2] = trainCentroid[2] - (u[2]*queryCentroid[0] + v[2]*queryCentroid[1] + w[2]*queryCentroid[2]);
+  
 
+  // Now we still have to figure out a translation component. Calculate the centroids of query and train keypoints and make them match
+  t1 = computeTranslation(u1,v1,w1, trainCentroid, queryCentroid);
+  t2 = computeTranslation(u2,v2,w2, trainCentroid, queryCentroid);
+  
+  
   // Set the estimate transform matrix based on what we just calculated
-  vtkSmartPointer<vtkMatrix4x4> estimate = vtkSmartPointer<vtkMatrix4x4>::New();
-  estimate->Identity();
-  estimate->SetElement(0,0,u[0]);
-  estimate->SetElement(1,0,u[1]);
-  estimate->SetElement(2,0,u[2]);
-  estimate->SetElement(0,1,v[0]);
-  estimate->SetElement(1,1,v[1]);
-  estimate->SetElement(2,1,v[2]);
-  estimate->SetElement(0,2,w[0]);
-  estimate->SetElement(1,2,w[1]);
-  estimate->SetElement(2,2,w[2]);
-  estimate->SetElement(0,3,t[0]);
-  estimate->SetElement(1,3,t[1]);
-  estimate->SetElement(2,3,t[2]);
+  setEstimate(estimate1, u1, v1, w1, t1);
+  setEstimate(estimate2, u2, v2, w2, t2);
+
   
   // Compute squared distance error of matching keypoints
   std::vector<vnl_double_3> trainInlierPoints;
-  std::vector<vnl_double_3> queryInlierPoints;
+  std::vector<vnl_double_3> queryInlierPoints1, queryInlierPoints2;
   for(int i=0; i<inliersIdx.size(); i++) {
     trainInlierPoints.push_back(trainPoints[inliersIdx[i]]);
     vnl_double_3 qpoint;
     qpoint[0] = queryPoints[inliersIdx[i]][0];
     qpoint[1] = queryPoints[inliersIdx[i]][1];
     qpoint[2] = 0.0;
-    queryInlierPoints.push_back(transformPoint(qpoint, estimate));
+    queryInlierPoints1.push_back(transformPoint(qpoint, estimate1));
+    queryInlierPoints2.push_back(transformPoint(qpoint, estimate2));
   }
-  double meanMatchDistance = computeMeanDistance(trainInlierPoints, queryInlierPoints);
+  double meanMatchDistance1 = computeMeanDistance(trainInlierPoints, queryInlierPoints1);
+  double meanMatchDistance2 = computeMeanDistance(trainInlierPoints, queryInlierPoints2);
+
+  // Final solution
+  double meanMatchDistance;
+  vtkSmartPointer<vtkMatrix4x4> estimate = vtkSmartPointer<vtkMatrix4x4>::New();
+  if(meanMatchDistance2<meanMatchDistance1)
+  {
+    estimate->DeepCopy(estimate2);
+    meanMatchDistance = meanMatchDistance2;
+  }
+  else
+  {
+    estimate->DeepCopy(estimate1);
+    meanMatchDistance = meanMatchDistance1;
+  }
   this->matchDistances[this->currentImgIndex] = meanMatchDistance;
   oss << "Mean Match Distance: " << meanMatchDistance << std::endl;
   
@@ -2321,51 +2370,81 @@ void vtkSlicerSurfFeaturesLogic::setMaskFile(std::string file)
   this->Modified();
 }
 
-void vtkSlicerSurfFeaturesLogic::writeKeypointsAndDescriptors(std::string directory)
+void vtkSlicerSurfFeaturesLogic::saveKeypointsAndDescriptors(std::string directory, std::string who)
 {
-  if(this->isQueryLoading())
+
+  if(who == "bogus")
+  {
+    this->saveKeypointsAndDescriptors(directory, this->bogusFile, this->bogusFrames, this->bogusImagesNames, this->bogusKeypoints, this->bogusDescriptors, who);
+  }
+  else if(who == "train")
+  {
+    this->saveKeypointsAndDescriptors(directory, this->trainFile, this->trainFrames, this->trainImagesNames, this->trainKeypoints, this->trainDescriptors, who);
+  }
+  else if(who == "query")
+  {
+    this->saveKeypointsAndDescriptors(directory, this->queryFile, this->queryFrames, this->queryImagesNames, this->queryKeypoints, this->queryDescriptors, who);
+  }
+  else
     return;
+}
+
+void vtkSlicerSurfFeaturesLogic::saveKeypointsAndDescriptors(const string& directory,\
+                                                             const string& file,\
+                                                             const vector<int>& frames,\
+                                                             const vector<string>& imagesNames,\
+                                                             const vector<vector<cv::KeyPoint> >& keypoints,\
+                                                             const vector<cv::Mat>& descriptors,\
+                                                             const string& who)
+{
+  if(who == "bogus" && this->isBogusLoading())
+    return;
+  if(who == "train" && this->isTrainLoading())
+    return;
+  if(who == "query" && this->isQueryLoading())
+    return;
+
 
   cv::FileStorage fileList((directory+"info.yml").c_str(), cv::FileStorage::WRITE);
   vector<string> flist;
-  for(int j=0; j<this->queryKeypoints.size(); j++)
+  for(int j=0; j<keypoints.size(); j++)
   {
-    std::string outputFile = directory + this->queryImagesNames[j];
+    std::string outputFile = directory + imagesNames[j];
     std::string dir,file,ext;
-    splitDir(this->queryImagesNames[j],dir,file,ext);
+    splitDir(imagesNames[j],dir,file,ext);
     outputFile = directory + file + ".yml";
     flist.push_back(outputFile);
     cout << outputFile << endl;
     cv::FileStorage fs(outputFile.c_str(), cv::FileStorage::WRITE);
-    cv::write(fs,"keypoints",this->queryKeypoints[j]);
-    cv::write(fs,"descriptors",this->queryDescriptors[j]);
+    cv::write(fs,"keypoints",keypoints[j]);
+    cv::write(fs,"descriptors",descriptors[j]);
     fs.release();
   }
   vector<float> cropRatios_vec;
   for(int i=0;i<4;i++) cropRatios_vec.push_back(this->cropRatios[i]);
   cv::write(fileList, "fileList", flist);
-  cv::write(fileList, "mhaFile", this->queryFile);
+  cv::write(fileList, "mhaFile", file);
   cv::write(fileList, "minHessian", this->minHessian);
   cv::write(fileList, "cropRatios", cropRatios_vec);
-  cv::write(fileList, "frames", this->queryFrames);
+  cv::write(fileList, "frames", queryFrames);
   cv::write(fileList, "maskFile", this->maskFile);
-  
 }
 
-void vtkSlicerSurfFeaturesLogic::loadKeypointsAndDescriptors(std::string directory, string who)
+
+void vtkSlicerSurfFeaturesLogic::loadKeypointsAndDescriptors(string directory, string who)
 {
   if(who == "bogus")
     this->loadKeypointsAndDescriptors(directory, this->bogusImages, this->bogusImagesTransform,\
     this->bogusTransformsValidity, this->bogusImagesNames, this->bogusFrames, this->bogusFile,\
-    this->bogusKeypoints, this->bogusDescriptors);
+    this->bogusKeypoints, this->bogusDescriptors,who);
   else if(who == "train")
     this->loadKeypointsAndDescriptors(directory, this->trainImages, this->trainImagesTransform,\
     this->trainTransformsValidity, this->trainImagesNames, this->trainFrames, this->trainFile,\
-    this->trainKeypoints, this->trainDescriptors);
+    this->trainKeypoints, this->trainDescriptors,who);
   else if(who == "query")
     this->loadKeypointsAndDescriptors(directory, this->queryImages, this->queryImagesTransform,\
     this->queryTransformsValidity, this->queryImagesNames, this->queryFrames, this->queryFile,\
-    this->queryKeypoints, this->queryDescriptors);
+    this->queryKeypoints, this->queryDescriptors,who);
 }
 
 void vtkSlicerSurfFeaturesLogic::loadKeypointsAndDescriptors(string directory, \
@@ -2373,30 +2452,32 @@ void vtkSlicerSurfFeaturesLogic::loadKeypointsAndDescriptors(string directory, \
                                                              vector<vector<float> >& transforms,\
                                                              vector<bool>& transformsValidity,\
                                                              vector<string>& imagesNames,\
-                                                             vector<int>& frames, string file,\
+                                                             vector<int>& frames, string& file,\
                                                              vector<vector<cv::KeyPoint> >& keypoints,\
-                                                             vector<cv::Mat>& descriptors)
+                                                             vector<cv::Mat>& descriptors,\
+                                                             const string& who)
 {
+  normalizeDir(directory);
   cv::FileStorage info(directory+"info.yml", cv::FileStorage::READ);
   vector<string> fileList;
   vector<float> cropRatios_vec;
   string mFile;
-  if(info.isOpened())
-  {
-    cv::read(info["fileList"], fileList);
-    cv::read(info["mhaFile"], file, "");
-    cv::read(info["cropRatios"], cropRatios_vec);
-    cv::read(info["minHessian"], this->minHessian, 400);
-    cv::read(info["frames"], frames);
-    cv::read(info["maskFile"], mFile, "");
-  }
+  if(!info.isOpened())
+    return;
+
+  cv::read(info["fileList"], fileList);
+  cv::read(info["mhaFile"], file, "");
+  cv::read(info["cropRatios"], cropRatios_vec);
+  cv::read(info["minHessian"], this->minHessian, 400);
+  cv::read(info["frames"], frames);
+  cv::read(info["maskFile"], mFile, "");
 
   for(int i=0;i<4;i++) this->cropRatios[i]=cropRatios_vec[i];
   images.clear();
   keypoints.clear();
   descriptors.clear();
 
-  // this will override the previously present values
+  // Read in images
   read_mha(file, images, imagesNames, transforms, transformsValidity, frames);
 
   // Crop the mask
@@ -2406,6 +2487,7 @@ void vtkSlicerSurfFeaturesLogic::loadKeypointsAndDescriptors(string directory, \
   // Compute centroid
   computeCentroid(this->croppedMask, this->xcentroid, this->ycentroid);
   
+  // Crop the images
   for(int i=0; i<images.size(); i++)
   {
     cropData(images[i], this->cropRatios);
@@ -2425,6 +2507,27 @@ void vtkSlicerSurfFeaturesLogic::loadKeypointsAndDescriptors(string directory, \
     }
     fs.release();
   }
+
+  // Update logic parameters and call Modified() so that the gui is updated too
+  if(who == "bogus"){
+    this->bogusStartFrame = frames[0];
+    this->bogusStopFrame = *(frames.end()-1);
+    this->bogusProgress = 100;
+    this->Modified();
+  }
+  else if(who == "train"){
+    this->trainProgress = 100;
+    this->trainStartFrame = frames[0];
+    this->trainStopFrame = *(frames.end()-1);
+    this->Modified();
+  }
+  else if(who == "query"){
+    this->queryStartFrame = frames[0];
+    this->queryStopFrame = *(frames.end()-1);
+    this->queryProgress = 100;
+    this->Modified();
+  }
+
  
 }
 

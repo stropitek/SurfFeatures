@@ -150,6 +150,9 @@ void qSlicerSurfFeaturesModuleWidget::setup()
   connect(d->logMatchesButton, SIGNAL(clicked()), this, SLOT(onLogMatches()));
   connect(d->maskFileButton, SIGNAL(clicked()), this, SLOT(onMaskFile()));
 
+  connect(d->saveKeypointsButton, SIGNAL(clicked()), this, SLOT(onSaveKeypoints()));
+  connect(d->loadKeypointsButton, SIGNAL(clicked()), this, SLOT(onLoadKeypoints()));
+
   // call some slots to make them effective from start
 
 
@@ -311,6 +314,24 @@ void qSlicerSurfFeaturesModuleWidget::onMaskFile()
   if(!fn.empty())
     d->logic()->setMaskFile(fn);
 }
+
+void qSlicerSurfFeaturesModuleWidget::onSaveKeypoints()
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  QString directory = QFileDialog::getExistingDirectory(this, tr("Save To Directory"), "/home");
+  d->logic()->saveKeypointsAndDescriptors(directory.toStdString(), d->saveLoadTypeComboBox->currentText().toLower().toStdString());
+
+}
+
+void qSlicerSurfFeaturesModuleWidget::onLoadKeypoints()
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  QString directory = QFileDialog::getExistingDirectory(this, tr("Save To Directory"), "/home");
+  d->consoleDebug->insertPlainText(directory.toStdString().c_str());
+  d->consoleDebug->insertPlainText(d->saveLoadTypeComboBox->currentText().toLower().toStdString().c_str());
+  d->logic()->loadKeypointsAndDescriptors(directory.toStdString(), d->saveLoadTypeComboBox->currentText().toLower().toStdString());
+}
+
 
 void qSlicerSurfFeaturesModuleWidget::updateParameters()
 {

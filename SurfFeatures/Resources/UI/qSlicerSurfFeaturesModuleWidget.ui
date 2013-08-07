@@ -205,13 +205,47 @@
          </layout>
         </item>
         <item row="3" column="0">
+         <widget class="QLabel" name="label_21">
+          <property name="text">
+           <string>Mask File</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="1">
+         <layout class="QHBoxLayout" name="maskFileHLayout">
+          <property name="rightMargin">
+           <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>6</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="maskFileLabel">
+            <property name="text">
+             <string>None</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="maskFileButton">
+            <property name="layoutDirection">
+             <enum>Qt::LeftToRight</enum>
+            </property>
+            <property name="text">
+             <string>Select Mask</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="4" column="0">
          <widget class="QLabel" name="label_3">
           <property name="text">
            <string>Bogus data: </string>
           </property>
          </widget>
         </item>
-        <item row="3" column="1">
+        <item row="4" column="1">
          <layout class="QHBoxLayout" name="bogusDataHLayout">
           <item>
            <widget class="ctkPathLineEdit" name="bogusPathLineEdit">
@@ -283,7 +317,7 @@
           </item>
          </layout>
         </item>
-        <item row="4" column="1">
+        <item row="5" column="1">
          <layout class="QHBoxLayout" name="bogusComputeHLayout">
           <item>
            <widget class="QPushButton" name="computeBogusButton">
@@ -313,14 +347,14 @@
           </item>
          </layout>
         </item>
-        <item row="5" column="0">
+        <item row="6" column="0">
          <widget class="QLabel" name="label_4">
           <property name="text">
            <string>Train data: </string>
           </property>
          </widget>
         </item>
-        <item row="5" column="1">
+        <item row="6" column="1">
          <layout class="QHBoxLayout" name="trainDataHLayout">
           <property name="sizeConstraint">
            <enum>QLayout::SetDefaultConstraint</enum>
@@ -395,7 +429,7 @@
           </item>
          </layout>
         </item>
-        <item row="6" column="1">
+        <item row="7" column="1">
          <layout class="QHBoxLayout" name="trainComputeHLayout">
           <item>
            <widget class="QPushButton" name="computeTrainButton">
@@ -422,14 +456,14 @@
           </item>
          </layout>
         </item>
-        <item row="9" column="0">
+        <item row="10" column="0">
          <widget class="QLabel" name="label">
           <property name="text">
            <string>Query data: </string>
           </property>
          </widget>
         </item>
-        <item row="9" column="1">
+        <item row="10" column="1">
          <layout class="QHBoxLayout" name="queryDataHLayout" stretch="0,0,0,0,0">
           <property name="spacing">
            <number>6</number>
@@ -513,14 +547,14 @@
           </item>
          </layout>
         </item>
-        <item row="10" column="0">
+        <item row="11" column="0">
          <widget class="QLabel" name="label_14">
           <property name="text">
            <string/>
           </property>
          </widget>
         </item>
-        <item row="10" column="1">
+        <item row="11" column="1">
          <layout class="QHBoxLayout" name="queryComputeHLayout">
           <item>
            <widget class="QPushButton" name="computeQueryButton">
@@ -533,31 +567,6 @@
            <widget class="QProgressBar" name="queryProgressBar">
             <property name="value">
              <number>0</number>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item row="11" column="0">
-         <widget class="QLabel" name="label_20">
-          <property name="text">
-           <string>Mask File:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="11" column="1">
-         <layout class="QHBoxLayout" name="maskFileHLayout">
-          <item>
-           <widget class="QLabel" name="maskFileLabel">
-            <property name="text">
-             <string>None</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QPushButton" name="maskFileButton">
-            <property name="text">
-             <string>Select Mask</string>
             </property>
            </widget>
           </item>
@@ -578,6 +587,43 @@
          <widget class="QProgressBar" name="correspondenceProgressBar">
           <property name="value">
            <number>0</number>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_2">
+        <item>
+         <widget class="QComboBox" name="saveLoadTypeComboBox">
+          <item>
+           <property name="text">
+            <string>Bogus</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Train</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Query</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="saveKeypointsButton">
+          <property name="text">
+           <string>Save Keypoints</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="loadKeypointsButton">
+          <property name="text">
+           <string>Load Keypoints</string>
           </property>
          </widget>
         </item>

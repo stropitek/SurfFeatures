@@ -89,6 +89,9 @@ public slots:
   void onLogMatches();
   void onMaskFile();
 
+  void onSaveKeypoints();
+  void onLoadKeypoints();
+
 protected:
   QScopedPointer<qSlicerSurfFeaturesModuleWidgetPrivate> d_ptr;
   
