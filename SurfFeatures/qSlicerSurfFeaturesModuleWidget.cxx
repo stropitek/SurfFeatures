@@ -216,7 +216,6 @@ SLOTDEF_0(onPlayImage, play);
 SLOTDEF_0(onPreviousImage, previousImage);
 SLOTDEF_0(onNextImage,nextImage);
 SLOTDEF_0(onShowCurrentImage,showCurrentImage);
-SLOTDEF_0(onSaveCurrentImage,saveCurrentImage);
 
 SLOTDEF_0(onLogMatches, writeMatches);
 
@@ -327,9 +326,14 @@ void qSlicerSurfFeaturesModuleWidget::onLoadKeypoints()
 {
   Q_D(qSlicerSurfFeaturesModuleWidget);
   QString directory = QFileDialog::getExistingDirectory(this, tr("Save To Directory"), "/home");
-  d->consoleDebug->insertPlainText(directory.toStdString().c_str());
-  d->consoleDebug->insertPlainText(d->saveLoadTypeComboBox->currentText().toLower().toStdString().c_str());
   d->logic()->loadKeypointsAndDescriptors(directory.toStdString(), d->saveLoadTypeComboBox->currentText().toLower().toStdString());
+}
+
+void qSlicerSurfFeaturesModuleWidget::onSaveCurrentImage()
+{
+  Q_D(qSlicerSurfFeaturesModuleWidget);
+  QString fileName = QFileDialog::getSaveFileName(this, tr("Open Image"), "/home/slice", tr("Image Files (*.png *.jpg *.bmp)"));
+  d->logic()->saveCurrentImage(fileName.toStdString());
 }
 
 

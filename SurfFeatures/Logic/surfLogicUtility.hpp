@@ -37,12 +37,8 @@ void computeTrain(vtkSlicerSurfFeaturesLogic* surf)
   }
 }
 
-void computeAll(vtkSlicerSurfFeaturesLogic* surf)
+void computeCorrespondences(vtkSlicerSurfFeaturesLogic* surf)
 {
-  computeQuery(surf);
-  computeTrain(surf);
-  computeBogus(surf);
-
   // Compute correspondences
   surf->startInterSliceCorrespondence();
   while(true)
@@ -50,14 +46,21 @@ void computeAll(vtkSlicerSurfFeaturesLogic* surf)
     if(!surf->isCorrespondenceComputing())
       break;
     surf->computeNextInterSliceCorrespondence();
-  }  
+  } 
+}
+
+void computeAll(vtkSlicerSurfFeaturesLogic* surf)
+{
+  computeQuery(surf);
+  computeTrain(surf);
+  computeBogus(surf);
+
+  computeCorrespondences(surf); 
 }
 
 // Reads lines from a file into a vector
 void readLines( const string& filename, vector<string>& lines )
 {
-    const char dlmtr = '/';
-
     lines.clear();
 
     ifstream file( filename.c_str() );
@@ -71,6 +74,11 @@ void readLines( const string& filename, vector<string>& lines )
         lines.push_back(str);
     }
     file.close();
+}
+
+void readTab(const string& filename, vector<vector<string> >& tab)
+{
+
 }
 
 // Normalize dir by adding the appropriate delimiter at the end, if not present

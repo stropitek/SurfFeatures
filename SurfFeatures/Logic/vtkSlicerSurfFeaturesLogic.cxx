@@ -859,6 +859,7 @@ void getPlaneFromPoints(vnl_double_3 p1, vnl_double_3 p2, vnl_double_3 p3, vnl_d
 
 double getAngle(const vnl_double_3& u, const vnl_double_3& v)
 {
+  // Get the angle (caution not signed!) use atan2 for signed angle in 2d plane
   return acos(dot_product(u,v)/(u.two_norm()*v.two_norm()));
 }
 
@@ -1045,7 +1046,7 @@ void writeMatlabFile(const std::vector<vnl_double_3>& queryPoints, const std::ve
   c = -d_g/normal_g[2];
   matlabof << "gfunc=@(x,y)(" << a << "*x+" << b << "*y+" << c << ");\n";
 
-  matlabof << "scatter3(X,Y,Z,50,'red','filled'); hold on; scatter3(Xi,Yi,Zi,50,'blue','filled'); scatter3(Xq,Yq,Zq,50,'green','filled');\n";
+  matlabof << "scatter3(X,Y,Z,50,'red','filled'); hold on; scatter3(Xi,Yi,Zi,50,'green','filled'); scatter3(Xq,Yq,Zq,50,'blue','filled');\n";
  
   matlabof << "cornerXe = [" << vpe1[0] << " " << vpe2[0] << " " << vpe3[0] << " " << vpe4[0] << "];\n";
   matlabof << "cornerYe = [" << vpe1[1] << " " << vpe2[1] << " " << vpe3[1] << " " << vpe4[1] << "];\n";
@@ -1059,7 +1060,7 @@ void writeMatlabFile(const std::vector<vnl_double_3>& queryPoints, const std::ve
   matlabof << "res = 100;\n"                                                                        ;
   matlabof << "h(1)=ezmesh(gfunc, [min(cornerXg) max(cornerXg) min(cornerYg) max(cornerYg)],res);\n";
   matlabof << "h(2)=ezmesh(efunc, [min(cornerXe) max(cornerXe) min(cornerYe) max(cornerYe)],res);\n";
-  matlabof << "colormap([0,1,0;1,0,0]);\n"                                                          ;
+  matlabof << "colormap([0,1,0;0,0,1]);\n"                                                          ;
   matlabof << "set(h(1),'CData',ones(res,res));\n"                                                  ;
   matlabof << "set(h(2),'CData',2*ones(res,res));\n"                                                ;
   matlabof << "x=get(h(1),'XData');\n"                                                              ;
@@ -1144,18 +1145,6 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   // Initialize Image to Probe transform
   this->ImageToProbeTransform = vtkSmartPointer<vtkMatrix4x4>::New();
   this->ImageToProbeTransform->Identity();
-  this->ImageToProbeTransform->SetElement(0,0,0.107535);
-  this->ImageToProbeTransform->SetElement(0,1,0.00094824);
-  this->ImageToProbeTransform->SetElement(0,2,0.0044213);
-  this->ImageToProbeTransform->SetElement(0,3,-65.9013);
-  this->ImageToProbeTransform->SetElement(1,0,0.0044901);
-  this->ImageToProbeTransform->SetElement(1,1,-0.00238041);
-  this->ImageToProbeTransform->SetElement(1,2,-0.106347);
-  this->ImageToProbeTransform->SetElement(1,3,-3.05698);
-  this->ImageToProbeTransform->SetElement(2,0,-0.000844189);
-  this->ImageToProbeTransform->SetElement(2,1,0.105271);
-  this->ImageToProbeTransform->SetElement(2,2,-0.00244457);
-  this->ImageToProbeTransform->SetElement(2,3,-17.1613);
 
 
   this->queryNode = vtkMRMLScalarVolumeNode::New();
@@ -1404,6 +1393,14 @@ void vtkSlicerSurfFeaturesLogic::readAndComputeFeaturesOnMhaFile(const std::stri
   transformsValidity.clear();
   if( read_mha( file, images, imagesNames, imagesTransform, transformsValidity, startFrame, stopFrame, frames) )
     return;
+
+  // To remove later. Automatically selects parameters given dimension of image...
+  if(images.size() > 0){
+    this->firstImage = images[0].clone();
+    this->updateCalibrationMatrix(images[0].rows, images[0].cols);
+    this->updateMask(images[0].rows, images[0].cols);
+    this->updateCropRatios(images[0].rows, images[0].cols);
+  }
   ostringstream oss;
   oss << "Read " << frames.size() << " images for " << who << " data" << endl;
   this->log(oss.str());
@@ -1797,7 +1794,6 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     // compute the diff vector of the query keypoint locations
     vnl_double_3 queryDiff = queryPoints[inliersIdx[idx1]] - queryPoints[inliersIdx[idx2]];
     // Angle between the diff vector and the u unit vector
-    double x = getAngle(vnl_double_3(1.0,0.0,0.0),queryDiff);
     double theta = atan2(queryDiff[1], queryDiff[0]);
   
     // compute the diff vector of the projected train keypoint locations
@@ -1837,13 +1833,16 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   v1.normalize(); v2.normalize();
   w1.normalize(); w2.normalize();
 
-  // Scale
-  u1 *= 0.10763;
-  v1 *= 0.10530;
-  w1 *= 0.10646;
-  u2 *= 0.10763;
-  v2 *= 0.10530;
-  w2 *= 0.10646;
+  // Scale, use scaling from groundtruth, we assume it is known...
+  double scalex = sqrt(groundTruth->GetElement(0,0)*groundTruth->GetElement(0,0)+groundTruth->GetElement(1,0)*groundTruth->GetElement(1,0)+groundTruth->GetElement(2,0)*groundTruth->GetElement(2,0));
+  double scaley = sqrt(groundTruth->GetElement(0,1)*groundTruth->GetElement(0,1)+groundTruth->GetElement(1,1)*groundTruth->GetElement(1,1)+groundTruth->GetElement(2,1)*groundTruth->GetElement(2,1));
+  double scalez = sqrt(groundTruth->GetElement(0,2)*groundTruth->GetElement(0,2)+groundTruth->GetElement(1,2)*groundTruth->GetElement(1,2)+groundTruth->GetElement(2,2)*groundTruth->GetElement(2,2));
+  u1 *= scalex;
+  v1 *= scaley;
+  w1 *= scalez;
+  u2 *= scalex;
+  v2 *= scaley;
+  w2 *= scalez;
 
   
   vnl_double_3 trainCentroid(0,0,0);
@@ -1928,11 +1927,18 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   // Store the estimate
   //this->queryTransformEstimate[this->currentImgIndex] = vtkToStdMatrix(estimate);
 
+
+  // Print estimate and groundtruth
+  //this->log("Estimate:\n");
+  //this->printTransform(estimate);
+  //this->log("Groundtruth:\n");
+  //this->printTransform(groundTruth);
+  //this->log("Calibration:\n");
+  //this->printTransform(this->ImageToProbeTransform);
+
   
   cv::Mat& image = this->trainImageWithFeatures;
   image = this->queryImages[this->currentImgIndex].clone();
-
-  // TODO draw circles where inliners are...
 
   int width = image.cols;
   int height = image.rows;
@@ -2150,13 +2156,11 @@ void vtkSlicerSurfFeaturesLogic::showCropFirstImage()
 
 }
 
-void vtkSlicerSurfFeaturesLogic::saveCurrentImage()
+void vtkSlicerSurfFeaturesLogic::saveCurrentImage(std::string filepath)
 {
   if(this->queryImages.empty())
     return;
-  std::string fn = this->queryImagesNames[this->currentImgIndex];
-  fn.replace(fn.end()-4,fn.end(),".png");
-  cv::imwrite(std::string("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\")+fn,this->queryImages[this->currentImgIndex]);
+  cv::imwrite(filepath,this->queryImages[this->currentImgIndex]);
 }
 
 
@@ -2372,7 +2376,6 @@ void vtkSlicerSurfFeaturesLogic::setMaskFile(std::string file)
 
 void vtkSlicerSurfFeaturesLogic::saveKeypointsAndDescriptors(std::string directory, std::string who)
 {
-
   if(who == "bogus")
   {
     this->saveKeypointsAndDescriptors(directory, this->bogusFile, this->bogusFrames, this->bogusImagesNames, this->bogusKeypoints, this->bogusDescriptors, who);
@@ -2436,15 +2439,15 @@ void vtkSlicerSurfFeaturesLogic::loadKeypointsAndDescriptors(string directory, s
   if(who == "bogus")
     this->loadKeypointsAndDescriptors(directory, this->bogusImages, this->bogusImagesTransform,\
     this->bogusTransformsValidity, this->bogusImagesNames, this->bogusFrames, this->bogusFile,\
-    this->bogusKeypoints, this->bogusDescriptors,who);
+    this->bogusKeypoints, this->bogusDescriptors, this->bogusDescriptorMatcher, who);
   else if(who == "train")
     this->loadKeypointsAndDescriptors(directory, this->trainImages, this->trainImagesTransform,\
     this->trainTransformsValidity, this->trainImagesNames, this->trainFrames, this->trainFile,\
-    this->trainKeypoints, this->trainDescriptors,who);
+    this->trainKeypoints, this->trainDescriptors, this->trainDescriptorMatcher, who);
   else if(who == "query")
     this->loadKeypointsAndDescriptors(directory, this->queryImages, this->queryImagesTransform,\
     this->queryTransformsValidity, this->queryImagesNames, this->queryFrames, this->queryFile,\
-    this->queryKeypoints, this->queryDescriptors,who);
+    this->queryKeypoints, this->queryDescriptors, this->queryDescriptorMatcher, who);
 }
 
 void vtkSlicerSurfFeaturesLogic::loadKeypointsAndDescriptors(string directory, \
@@ -2455,6 +2458,7 @@ void vtkSlicerSurfFeaturesLogic::loadKeypointsAndDescriptors(string directory, \
                                                              vector<int>& frames, string& file,\
                                                              vector<vector<cv::KeyPoint> >& keypoints,\
                                                              vector<cv::Mat>& descriptors,\
+                                                             cv::Ptr<cv::DescriptorMatcher> descriptorMatcher,\
                                                              const string& who)
 {
   normalizeDir(directory);
@@ -2495,7 +2499,7 @@ void vtkSlicerSurfFeaturesLogic::loadKeypointsAndDescriptors(string directory, \
 
   for(int i=0; i<fileList.size(); i++)
   {
-    cv::FileStorage fs(directory+fileList[i], cv::FileStorage::READ);
+    cv::FileStorage fs(fileList[i], cv::FileStorage::READ);
     if(fs.isOpened())
     {
       keypoints.push_back(vector<cv::KeyPoint>());
@@ -2507,7 +2511,8 @@ void vtkSlicerSurfFeaturesLogic::loadKeypointsAndDescriptors(string directory, \
     }
     fs.release();
   }
-
+  descriptorMatcher->clear();
+  descriptorMatcher->add(descriptors);
   // Update logic parameters and call Modified() so that the gui is updated too
   if(who == "bogus"){
     this->bogusStartFrame = frames[0];
@@ -2534,4 +2539,83 @@ void vtkSlicerSurfFeaturesLogic::loadKeypointsAndDescriptors(string directory, \
 void vtkSlicerSurfFeaturesLogic::setImageToProbeTransform(vtkMatrix4x4* matrix)
 {
   this->ImageToProbeTransform->DeepCopy(matrix);
+}
+
+void vtkSlicerSurfFeaturesLogic::printTransform(vtkMatrix4x4* matrix)
+{
+  for(int i=0; i<4; i++) {
+    ostringstream oss;
+    for(int j=0; j<4; j++){
+      oss << matrix->GetElement(i,j) << " ";
+    }
+    oss << "\n";
+    this->log(oss.str());
+  }
+}
+
+// Temp function for automatically selecting image to probe matrix...
+void vtkSlicerSurfFeaturesLogic::updateCalibrationMatrix(int rows, int cols)
+{
+  // Amigo data res1
+  if(rows == 1200 && cols == 1920){
+    this->ImageToProbeTransform->Identity();
+    // to complete
+  }
+  // Amigo data res2
+  else if(rows == 1024 && cols == 1280){
+    this->ImageToProbeTransform->Identity();
+    this->ImageToProbeTransform->SetElement(0,0,0.107535);
+    this->ImageToProbeTransform->SetElement(0,1,0.00094824);
+    this->ImageToProbeTransform->SetElement(0,2,0.0044213);
+    this->ImageToProbeTransform->SetElement(0,3,-65.9013);
+    this->ImageToProbeTransform->SetElement(1,0,0.0044901);
+    this->ImageToProbeTransform->SetElement(1,1,-0.00238041);
+    this->ImageToProbeTransform->SetElement(1,2,-0.106347);
+    this->ImageToProbeTransform->SetElement(1,3,-3.05698);
+    this->ImageToProbeTransform->SetElement(2,0,-0.000844189);
+    this->ImageToProbeTransform->SetElement(2,1,0.105271);
+    this->ImageToProbeTransform->SetElement(2,2,-0.00244457);
+    this->ImageToProbeTransform->SetElement(2,3,-17.1613);
+  }
+  else // MNI data
+    this->ImageToProbeTransform->Identity();
+}
+
+// Temp function for automatically selecting appropriate mask...
+void vtkSlicerSurfFeaturesLogic::updateMask(int rows, int cols)
+{
+  // Amigo data res1
+  if(rows == 1200 && cols == 1920){
+    this->setMaskFile("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\mask1920x1200.png");
+  }
+  // Amigo data res2
+  else if(rows == 1024 && cols == 1280){
+    this->setMaskFile("C:\\Users\\DanK\\MProject\\data\\US\\SlicerSaved\\mask1280x1024.png");
+  }
+  else // MNI data
+    this->setMaskFile("C:\\Users\\DanK\\MProject\\data\\MNI\\mni_mask.png");
+}
+
+void vtkSlicerSurfFeaturesLogic::updateCropRatios(int rows, int cols)
+{
+  // Amigo data res1
+  if(rows == 1200 && cols == 1920){
+    this->setLeftCrop(0.27);
+    this->setTopCrop(0.11);
+    this->setRightCrop(0.70);
+    this->setBottomCrop(0.75);
+  }
+  // Amigo data res2
+  else if(rows == 1024 && cols == 1280){
+    this->setLeftCrop(0.2);
+    this->setTopCrop(0.17);
+    this->setRightCrop(0.75);
+    this->setBottomCrop(0.75);
+  }
+  else{ // MNI data
+    this->setLeftCrop(0.);
+    this->setTopCrop(0.);
+    this->setRightCrop(1.);
+    this->setBottomCrop(1.);
+  }
 }

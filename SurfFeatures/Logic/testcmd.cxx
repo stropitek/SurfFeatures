@@ -10,8 +10,8 @@ int main()
 {
   vector<string> files;
   vector<string> outputDirs;
-  readLines("C:\\Users\\DanK\\MProject\\data\\MNI\\mni_mha.txt",files);
-  readLines("C:\\Users\\DanK\\MProject\\data\\MNI\\save_dirs.txt",outputDirs);
+  readLines("C:\\Users\\DanK\\MProject\\data\\MNI_AMIGO_mha.txt",files);
+  readLines("C:\\Users\\DanK\\MProject\\data\\MNI_AMIGO_dirs.txt",outputDirs);
 
   if(files.size() != outputDirs.size())
     return 0;
@@ -26,15 +26,10 @@ int main()
     vtkSmartPointer<vtkMatrix4x4> matrix = vtkSmartPointer<vtkMatrix4x4>::New();
     matrix->Identity();
     surf->setImageToProbeTransform(matrix);
-    // Set cropping correctly...
-    float cropRatios[4] = {0,1,0,1};
-    surf->setCropRatios(cropRatios);
-    surf->setMaskFile("C:\\Users\\DanK\\MProject\\data\\MNI\\mni_mask.png");
     computeQuery(surf);
-    std::string dir, file, ext;
-    splitDir(files[i],dir,file,ext);
+    //std::string dir, file, ext;
+    //splitDir(files[i],dir,file,ext);
     surf->saveKeypointsAndDescriptors(outputDirs[i],"query");
-    //surf->loadKeypointsAndDescriptors(outputDir, "query");
 
 
     surf->Delete();

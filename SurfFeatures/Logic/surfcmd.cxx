@@ -2,112 +2,127 @@
 #include "logicUtility.hpp"
 #include "surfLogicUtility.hpp"
 
+#define MATLAB_LOG_RESULTS std::ostringstream oss;\
+    oss << "x{" << l << "}";\
+    writeVarForMatlab(ofs, oss.str()+".bogusFile", bogusFile);\
+    writeVarForMatlab(ofs, oss.str()+".trainFile", trainFile);\
+    writeVarForMatlab(ofs, oss.str()+".queryFile", queryFile);\
+    writeVarForMatlab(ofs, oss.str()+".ransacMargin", ransacMargin);\
+    writeVarForMatlab(ofs, oss.str()+".minHessian", minHessian);\
+    writeVarForMatlab(ofs, oss.str()+".repetition", l);\
+    writeVarForMatlab(ofs, oss.str()+".iInliers", surf->getIInliers());\
+    writeVarForMatlab(ofs, oss.str()+".iOutliers", surf->getIOutliers());\
+    writeVarForMatlab(ofs, oss.str()+".matchDistance", surf->getMatchDistances());\
+    writeVarForMatlab(ofs, oss.str()+".planeDistance", surf->getPlaneDistances());
+
+
+
+
+void planeFittingFromFiles(string bogusFile, string trainFile, string queryFile, string outputFile,\
+                               int minHessian = 400, float ransacMargin = 1.5, int repetitions = 20,\
+                               int bogusStart = 0, int bogusStop = -1,\
+                               int trainStart = 0, int trainStop = -1,\
+                               int queryStart = 0, int queryStop = -1)
+{
+  ofstream ofs(outputFile.c_str());
+  if(!ofs.is_open()){
+    cerr << "Open output file " << outputFile << " failed\n";
+    return;
+  }
+
+  vtkSlicerSurfFeaturesLogic* surf = vtkSlicerSurfFeaturesLogic::New();
+  surf->setBogusFile(bogusFile);
+  surf->setTrainFile(trainFile);
+  surf->setQueryFile(queryFile);
+
+  surf->setBogusStartFrame(bogusStart);
+  surf->setBogusStopFrame(bogusStop);
+  surf->setTrainStartFrame(trainStart);
+  surf->setTrainStopFrame(trainStop);
+  surf->setQueryStartFrame(queryStart);
+  surf->setQueryStopFrame(queryStop);
+
+  surf->setMinHessian(minHessian);
+  surf->setRansacMargin(ransacMargin);
+
+  // We don't set mask file, crop ratios and calibration matrices, they are set automatically based on resolution of file...
+
+  computeAll(surf);
+
+  for(int l=0; l<repetitions; l++) {
+    surf->simulateAll();
+    MATLAB_LOG_RESULTS
+  }
+
+  surf->Delete();
+}
+
+void planeFittingFromSavedKeypoints(string bogusFile, string trainFile, string queryFile, string outputFile,\
+                                    float ransacMargin = 1.5, int repetitions = 20)
+{
+  ofstream ofs(outputFile.c_str());
+  if(!ofs.is_open()){
+    cerr << "Open output file " << outputFile << " failed\n";
+    return;
+  }
+
+  vtkSlicerSurfFeaturesLogic* surf = vtkSlicerSurfFeaturesLogic::New();
+  
+  // Load given the directory where keypoints and descriptors are stored
+  surf->loadKeypointsAndDescriptors(bogusFile, "bogus");
+  surf->loadKeypointsAndDescriptors(trainFile, "train");
+  surf->loadKeypointsAndDescriptors(queryFile, "query");
+
+  // min hessian cannot be changed because keypoints depend on this parameters
+  surf->setRansacMargin(ransacMargin);
+  int minHessian = surf->getMinHessian();
+
+  // Compute correspondences
+  computeCorrespondences(surf);
+
+  
+
+  for(int l=0; l<repetitions; l++) {
+    surf->simulateAll();
+    MATLAB_LOG_RESULTS
+  }
+
+  surf->Delete();
+}
+
+
 
 int main (int argc, char const *argv[])
 {
-  vtkSlicerSurfFeaturesLogic* surf = vtkSlicerSurfFeaturesLogic::New();
-  surf->setMaskFile("C:\\Users\\DanK\\MProject\\data\\MNI\\mni_mask.png");
-  float cropRatios[4] = {0.,1.,0.,1.};
-  surf->setCropRatios(cropRatios);
+  vector<string> outputFiles;
+  vector<string> bogusFiles;
+  vector<string> trainFiles;
+  vector<string> queryFiles;
 
-  // Parameters init
-  std::vector<std::string> bogusFiles;
-  std::vector<std::string> trainFiles;
-  std::vector<std::string> queryFiles;
   #ifdef WIN32
   //bogusFiles.push_back("C:\\Users\\DanK\\MProject\\data\\US\\Plus_test\\TrackedImageSequence_20121210_162606.mha");
   bogusFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\group1\\01\\pre\\sweep_1a\\sweep_1a.mha");
+  //bogusFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\save\\sweep_1a");
   //trainFiles.push_back("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha");
   trainFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\group1\\06\\pre\\sweep_6c\\sweep_6c.mha");
+  //trainFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\save\\sweep_6c");
   //queryFiles.push_back("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha";)
   queryFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\group1\\06\\pre\\sweep_6d\\sweep_6d.mha");
+  //queryFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\save\\sweep_6d");
+  outputFiles.push_back("C:\\Users\\DanK\\MProject\\data\\Results\\preop_6c_6d_2.txt");
+
   #else
   bogusFiles.push_back("/Users/dkostro/Projects/MProject/data/US/Plus_test/TrackedImageSequence_20121210_162606.mha");
   trainFiles.push_back("/Users/dkostro/Projects/MProject/data/US/decemberUS/TrackedImageSequence_20121211_095535.mha");
   queryFiles.push_back("/Users/dkostro/Projects/MProject/data/US/decemberUS/TrackedImageSequence_20121211_095535.mha");
+  outputFiles.push_back("/Users/dkostro/Projects/MProject/data/Results/preop_6c_6d.txt");
   #endif
-
-  std::vector<int> bogusStartFrames;
-  std::vector<int> bogusStopFrames;
-  std::vector<int> trainStartFrames;
-  std::vector<int> trainStopFrames;
-  std::vector<int> queryStartFrames;
-  std::vector<int> queryStopFrames;
-
-  bogusStartFrames.push_back(0);
-  bogusStopFrames.push_back(200);
-  trainStartFrames.push_back(0);
-  trainStopFrames.push_back(-1);
-  queryStartFrames.push_back(0);
-  queryStopFrames.push_back(-1);
-
-
-  std::vector<int> minHessians;
-  std::vector<float> ransacMargins;
-  // minHessians.push_back(300);
-  minHessians.push_back(400);
-  //minHessians.push_back(400);
-  // minHessians.push_back(500);
-  // minHessians.push_back(600);
-  
-  // ransacMargins.push_back(1.0);
-  ransacMargins.push_back(1.5);
-  // ransacMargins.push_back(2.0);
-  // ransacMargins.push_back(2.5);
-  // ransacMargins.push_back(3.0);
-
-  int repetitions = 1;
-
-  int iFiles = bogusFiles.size();
-  if(trainFiles.size()!=iFiles || queryFiles.size()!=iFiles || bogusStartFrames.size()!=iFiles || trainStartFrames.size()!=iFiles || queryStartFrames.size()!=iFiles || bogusStopFrames.size()!=iFiles || trainStopFrames.size()!=iFiles || queryStopFrames.size()!=iFiles) {
-    std::cerr << "Error: invalid parameters" << std::endl;
-    return 1;
-  }
-
-  int count = 0;
-  #ifdef WIN32
-  std::ofstream ofs("C:\\Users\\DanK\\MProject\\data\\Results\\preop_6c_6d.txt");
-  #else
-  std::ofstream ofs("/Users/dkostro/Projects/MProject/data/US/Results/surfResults.txt");
-  #endif
-  for(int i=0; i<iFiles; i++)
+ 
+  for(int i=0; i<bogusFiles.size(); i++)
   {
-    surf->setBogusFile(bogusFiles[i]);
-    surf->setTrainFile(trainFiles[i]);
-    surf->setQueryFile(queryFiles[i]);
-
-    surf->setBogusStartFrame(bogusStartFrames[i]);
-    surf->setTrainStartFrame(trainStartFrames[i]);
-    surf->setQueryStartFrame(queryStartFrames[i]);
-    surf->setBogusStopFrame(bogusStopFrames[i]);
-    surf->setTrainStopFrame(trainStopFrames[i]);
-    surf->setQueryStopFrame(queryStopFrames[i]);
-    for(int j=0; j<minHessians.size(); j++)
-    {
-      surf->setMinHessian(minHessians[j]);
-      computeAll(surf);
-      for(int k=0; k<ransacMargins.size(); k++)
-      {
-        for(int l=0; l<repetitions; l++) {
-          count++;
-          surf->setRansacMargin(ransacMargins[k]);
-          surf->simulateAll();
-          std::ostringstream oss;
-          oss << "x{" << count << "}";
-          writeVarForMatlab(ofs, oss.str()+".bogusFile", bogusFiles[i]);
-          writeVarForMatlab(ofs, oss.str()+".trainFile", trainFiles[i]);
-          writeVarForMatlab(ofs, oss.str()+".queryFile", queryFiles[i]);
-          writeVarForMatlab(ofs, oss.str()+".ransacMargin", ransacMargins[k]);
-          writeVarForMatlab(ofs, oss.str()+".minHessian", minHessians[j]);
-          writeVarForMatlab(ofs, oss.str()+".repetition", l);
-          writeVarForMatlab(ofs, oss.str()+".iInliers", surf->getIInliers());
-          writeVarForMatlab(ofs, oss.str()+".iOutliers", surf->getIOutliers());
-          writeVarForMatlab(ofs, oss.str()+".matchDistance", surf->getMatchDistances());
-          writeVarForMatlab(ofs, oss.str()+".planeDistance", surf->getPlaneDistances());
-        }
-      }
-    }
+    planeFittingFromFiles(bogusFiles[i], trainFiles[i], queryFiles[i], outputFiles[i]);
+    //planeFittingFromSavedKeypoints(bogusFiles[i], trainFiles[i], queryFiles[i], outputFiles[i]);
   }
-  surf->Delete();
+  
   return 0;
 }

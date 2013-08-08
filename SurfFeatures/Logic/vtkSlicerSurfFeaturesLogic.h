@@ -125,7 +125,7 @@ public:
   void updateMatchNode();
   void updateMatchNodeRansac();
   void showCropFirstImage();
-  void saveCurrentImage();
+  void saveCurrentImage(string filepath);
 
 private:
   void updateImage();
@@ -182,6 +182,7 @@ void loadKeypointsAndDescriptors(string directory,\
                                  vector<int>& frames, string& file,\
                                  vector<vector<cv::KeyPoint> >& keypoints,\
                                  vector<cv::Mat>& descriptors,\
+                                 cv::Ptr<cv::DescriptorMatcher> descriptorMatcher,\
                                  const string& who);
 
 void saveKeypointsAndDescriptors(const string& directory,\
@@ -191,6 +192,11 @@ void saveKeypointsAndDescriptors(const string& directory,\
                                  const vector<vector<cv::KeyPoint> >& keypoints,\
                                  const vector<cv::Mat>& descriptors,\
                                  const string& who);
+
+void printTransform(vtkMatrix4x4* matrix);
+void updateCalibrationMatrix(int rows, int cols);
+void updateMask(int rows, int cols);
+void updateCropRatios(int rows, int cols);
 
   // ================================================
   // Other
