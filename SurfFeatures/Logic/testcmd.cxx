@@ -9,7 +9,6 @@
 #include <vtkImageReslice.h>
 
 #include <iostream>
-#include <windows.h>
 
 using namespace std;
 
@@ -22,7 +21,7 @@ typedef itk::ImageToVTKImageFilter<ImageType> imageToVTKImageFilterType;
 
 
 
-void writeKeypointFromMhaFile(string mhaFile, string outputDir, int minHessian)
+void writeKeypointsFromMhaFile(string mhaFile, string outputDir, int minHessian)
 {
   vtkSlicerSurfFeaturesLogic* surf = vtkSlicerSurfFeaturesLogic::New();
   surf->setQueryFile(mhaFile);
