@@ -78,7 +78,29 @@ void readLines( const string& filename, vector<string>& lines )
 
 void readTab(const string& filename, vector<vector<string> >& tab)
 {
+  tab.clear();
+  ifstream file(filename.c_str());
+  if(!file.is_open())
+    return;
+  vector<string> lines;
+  while(!file.eof())
+  {
+    string str; getline(file,str);
+  }
 
+  for(int i=0; i<lines.size(); i++)
+  {
+    istringstream iss(lines[i]);
+    vector<string> words;
+    while(!iss.eof())
+    {
+      string word;
+      iss >> word;
+      if(!word.empty())
+        words.push_back(word);
+    }
+    tab.push_back(words);
+  }
 }
 
 // Normalize dir by adding the appropriate delimiter at the end, if not present
