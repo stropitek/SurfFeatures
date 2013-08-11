@@ -215,6 +215,8 @@ private:
   // ============================================
   // Node
   vtkMRMLScalarVolumeNode* node;
+  vtkMRMLScalarVolumeNode* nodeResliced;
+
   vtkMRMLScalarVolumeNode* queryNode;
   vtkMRMLScalarVolumeNode* matchNode;
 
@@ -265,9 +267,15 @@ private:
   vtkSmartPointer<vtkImageData> queryImageData;
   vtkSmartPointer<vtkImageData> matchImageData;
 
+  vtkSmartPointer<vtkImageData> nodeImageData;
+  vtkSmartPointer<vtkImageData> nodeReslicedImageData;
+
   std::string maskFile;
   cv::Mat mask;
   cv::Mat croppedMask;
+
+  cv::Mat tempImage;
+  cv::Mat tempImage1;
 
   
 

@@ -13,7 +13,8 @@ set(${KIT}_SRCS
   vtkSlicer${MODULE_NAME}Logic.h
   )
   
-
+add_library(customUtils STATIC mhaReader.cxx mhaReader.h)
+target_link_libraries(customUtils ${OpenCV_LIBS})
 
 set(${KIT}_TARGET_LIBRARIES
   ${ITK_LIBRARIES}
@@ -29,7 +30,7 @@ SlicerMacroBuildModuleLogic(
   EXPORT_DIRECTIVE ${${KIT}_EXPORT_DIRECTIVE}
   INCLUDE_DIRECTORIES ${${KIT}_INCLUDE_DIRECTORIES} ${OpenCV_INCLUDE_DIRS}
   SRCS ${${KIT}_SRCS}
-  TARGET_LIBRARIES ${${KIT}_TARGET_LIBRARIES} ${OpenCV_LIBS}
+  TARGET_LIBRARIES ${${KIT}_TARGET_LIBRARIES} customUtils
 )
   
 get_cmake_property(_variableNames VARIABLES)
@@ -38,7 +39,7 @@ foreach (_variableName ${_variableNames})
 endforeach()
 
 add_executable(surfcmd surfcmd.cxx logicUtility.hpp surfLogicUtility.hpp)
-target_link_libraries(surfcmd ${KIT})
+target_link_libraries(surfcmd ${KIT} customUtils)
 
 add_executable(testcmd testcmd.cxx surfLogicUtility.hpp)
-target_link_libraries(testcmd ${KIT})
+target_link_libraries(testcmd ${KIT} customUtils)

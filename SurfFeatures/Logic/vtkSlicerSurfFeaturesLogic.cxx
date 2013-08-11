@@ -30,6 +30,7 @@ limitations under the License.
 #include <vtkImageImport.h>
 #include <vtkMatrix4x4.h>
 #include <vtkTransform.h>
+#include <vtkImageReslice.h>
 
 // STD includes
 #include <cassert>
@@ -57,11 +58,30 @@ limitations under the License.
 #include <opencv2/imgproc/imgproc_c.h>
 #include "opencv2/nonfree/gpu.hpp"
 
+// ITK includes
+#include <itkImageFileReader.h>
+#include <itkCastImageFilter.h>
+#include <itkNiftiImageIO.h>
+#include "itkImageToVTKImageFilter.txx"
+
 // vnl includes
 #include <vnl/vnl_double_3.h>
 
+// custom includes
+#include "mhaReader.h"
+
 using namespace std;
 using namespace cv;
+
+// itk typedefs
+typedef float PixelType;
+typedef unsigned char UCharPixelType; 
+const unsigned int    Dimension = 3;
+typedef itk::Image<PixelType, Dimension> ImageType;
+typedef itk::ImageFileReader< ImageType > ReaderType;
+typedef itk::Image<UCharPixelType, Dimension> UCharImageType;
+typedef itk::ImageToVTKImageFilter<ImageType> imageToVTKImageFilterType;
+typedef itk::CastImageFilter< ImageType, UCharImageType > CastFilterType;
 
 
 #ifdef WIN32
@@ -406,381 +426,6 @@ int
 }
 
 
-// ===========================================
-// Open cv matching
-// ===========================================
-
-std::string getDir(const std::string& filename)
-{
-  #ifdef WIN32
-  const char dlmtr = '\\';
-  #else
-  const char dlmtr = '/';
-  #endif
-
-  std::string dirName;
-  size_t pos = filename.rfind(dlmtr);
-  dirName = pos == string::npos ? "" : filename.substr(0, pos) + dlmtr;
-  return dirName;
-}
-
-
-void readTrainFilenames( const string& filename, string& dirName, vector<string>& trainFilenames )
-{
-
-  trainFilenames.clear();
-
-  ifstream file( filename.c_str() );
-  if ( !file.is_open() )
-    return;
-
-  dirName = getDir(filename);
-  while( !file.eof() )
-  {
-    string str; getline( file, str );
-    if( str.empty() ) break;
-    trainFilenames.push_back(str);
-  }
-  file.close();
-}
-
-int readImageDimensions_mha(const std::string& filename, int& cols, int& rows, int& count)
-{
-  ifstream file( filename.c_str() );
-  if ( !file.is_open() )
-    return 1;
-    
-  // Read until get dimensions
-  while( !file.eof() )
-  {
-    string str; getline( file, str );
-    if( str.empty() ) break;
-    char *pch = &(str[0]);
-    if( !pch )
-    {
-      return 1;
-      file.close();
-    }
-
-    if( strstr( pch, "DimSize =" ) )
-    {
-      if( sscanf( pch, "DimSize = %d %d %d", &cols, &rows, &count ) != 3 )
-      {
-        printf( "Error: could not read dimensions\n" );
-        file.close();
-        return 1;
-      }
-      file.close();
-      return 0;
-    }
-  }
-  file.close();
-  return 1;
-}
-
-void readImageTransforms_mha(const std::string& filename, std::vector<std::vector<float> >& transforms, std::vector<bool>& transformsValidity, std::vector<std::string>& filenames)
-{
-  std::string dirName = getDir(filename);
-  filenames.clear();
-  transforms.clear();
-  transformsValidity.clear();
-  
-  // Vector for reading in transforms
-  vector< float > vfTrans;
-  vfTrans.resize(12);
-  std::string pngFilename;
-
-  ifstream file( filename.c_str() );
-  if ( !file.is_open() )
-    return;
-
-  while( !file.eof() )
-  {
-    string str; getline( file, str );
-    if( str.empty() ) break;
-    char *pch = &(str[0]);
-    if( !pch )
-      return;
-
-    if( strstr( pch, "ProbeToTrackerTransform =" )
-      || strstr( pch, "UltrasoundToTrackerTransform =" ) )
-    {
-       // Parse name and transform
-       // Seq_Frame0000_ProbeToTrackerTransform = -0.224009 -0.529064 0.818481 212.75 0.52031 0.6452 0.559459 -14.0417 -0.824074 0.551188 0.130746 -26.1193 0 0 0 1 
-
-      char *pcName = pch;
-      char *pcTrans = strstr( pch, "=" );
-      pcTrans[-1] = 0; // End file name string pcName
-       //pcTrans++; // Increment to just after equal sign
-
-      pngFilename = dirName + pcName + ".png";// + pcTrans;
-
-      char *pch = pcTrans;
-
-      for( int j =0; j < 12; j++ )
-      {
-        pch = strchr( pch + 1, ' ' );
-        if( !pch )
-          return;
-        vfTrans[j] = atof( pch );
-        pch++;
-      }
-      transforms.push_back( vfTrans );
-      filenames.push_back(pngFilename);
-    }
-    else if(strstr(pch, "UltrasoundToTrackerTransformStatus") || strstr(pch, "ProbeToTrackerTransformStatus")) {
-      if(strstr(pch, "OK")){
-        transformsValidity.push_back(true);
-      }
-      else if(strstr(pch, "INVALID"))
-        transformsValidity.push_back(false);
-    }
-    if( strstr( pch, "ElementDataFile = LOCAL" ) )
-    {
-       // Done reading
-      break;
-    }
-  }
-}
-
-void readImages_mha(const std::string& filename, std::vector<cv::Mat>& images, std::vector<int> frames)
-{ 
-  int iImgCols = -1;
-  int iImgRows = -1;
-  int iImgCount = -1;
-  if(readImageDimensions_mha(filename, iImgCols, iImgRows, iImgCount))
-    return;
-
-  FILE *infile = fopen( filename.c_str(), "rb" );
-   char buffer[400];
-   while( fgets( buffer, 400, infile ) )
-   {
-     if( strstr( buffer, "ElementDataFile = LOCAL" ) )
-     {
-       // Done reading
-       break;
-     }
-   }
-
-   unsigned char *pucImgData = new unsigned char[iImgRows*iImgCols];
-   Mat mtImg(iImgRows, iImgCols, CV_8UC1, pucImgData);
-
-   // Read & write images
-   // frames should be ordered ascendant
-   void *ptr = NULL;
-   int lastFrame = 0;
-   for( int i = 0; i < frames.size(); i++ )
-   {
-     int skip = frames[i]-lastFrame;
-     lastFrame = frames[i]+1;
-     #ifdef WIN32
-     _fseeki64(infile, (__int64)iImgRows*(__int64)iImgCols*(__int64)skip, SEEK_CUR);
-     #else
-     fseek(infile, (long int)iImgRows*(long int)iImgCols*(long int)skip, SEEK_CUR);
-     #endif
-
-     Mat mtImgNew = mtImg.clone();
-     fread( mtImgNew.data, 1, iImgRows*iImgCols, infile );
-     images.push_back( mtImgNew );
-
-   }
-   delete [] pucImgData;
-   
-   fclose( infile );
-}
-
-
-// Will read all the data form firstFrame to lastFrame, excluding all slices with invalid transform
-int read_mha(
-  const string& filename,
-  vector <Mat>& images,
-  vector<string>& filenames,
-  vector< vector<float> >& transforms,
-  vector<bool>& transformsValidity,
-  int& firstFrame,
-  int& lastFrame,
-  std::vector<int>& frames
-  )
-{
-  int iImgCols = -1;
-  int iImgRows = -1;
-  int iImgCount = -1;
-  if(readImageDimensions_mha(filename, iImgCols, iImgRows, iImgCount))
-    return 1;
-
-    if(firstFrame < 0)
-     firstFrame = 0;
-   if(firstFrame >= iImgCount)
-     firstFrame = iImgCount-1;
-   if(lastFrame < 0 || lastFrame >= iImgCount)
-     lastFrame = iImgCount-1;
-   if(firstFrame > lastFrame)
-     firstFrame = lastFrame;
-
-  readImageTransforms_mha(filename, transforms, transformsValidity, filenames);
-  
-    
-  // Keep the transforms that are in the first-last range
-  std::vector<std::vector<float> > allTransforms = transforms;
-  std::vector<std::string> allFilenames = filenames;
-  std::vector<bool> allValidity = transformsValidity;
-  transformsValidity.clear();
-  transforms.clear();
-  filenames.clear();
-  frames.clear();
-  
-  // Discarding data with invalid transform
-  for(int i=0; i<allValidity.size(); i++) {
-    if(i<firstFrame || i>lastFrame  || !allValidity[i])
-      continue;
-    transforms.push_back(allTransforms[i]);
-    filenames.push_back(allFilenames[i]);
-    frames.push_back(firstFrame+i);
-    transformsValidity.push_back(true);
-  }
-
-  readImages_mha(filename, images, frames);
-
-  std::cout << "Read images: " << images.size() << std::endl;
-  std::cout << "Read transforms: " << transforms.size() << std::endl;
-  std::cout << "Read transforms validity: " << transformsValidity.size() << std::endl;
-  std::cout << "Read names: " << filenames.size() << std::endl;
-  
-  return 0;
-
-}
-
-int read_mha(
-  const string& filename,
-  vector <Mat>& images,
-  vector<string>& filenames,
-  vector< vector<float> >& transforms,
-  vector<bool>& transformsValidity,
-  std::vector<int> frames
-  )
-{
-  readImageTransforms_mha(filename, transforms, transformsValidity, filenames);
-  
-  std::vector<std::vector<float> > allTransforms = transforms;
-  std::vector<std::string> allFilenames = filenames;
-  std::vector<bool> allValidity = transformsValidity;
-  transformsValidity.clear();
-  transforms.clear();
-  filenames.clear();
-  
-  // Discarding data with invalid transform
-  for(int i=0; i<frames.size(); i++)
-  {
-    filenames.push_back(allFilenames[frames[i]]);
-    transformsValidity.push_back(allValidity[frames[i]]);
-    transforms.push_back(allTransforms[frames[i]]);
-  }
-
-  readImages_mha(filename, images, frames);
-
-  std::cout << "Read images: " << images.size() << std::endl;
-  std::cout << "Read transforms: " << transforms.size() << std::endl;
-  std::cout << "Read transforms validity: " << transformsValidity.size() << std::endl;
-  std::cout << "Read names: " << filenames.size() << std::endl;
-  
-  return 0;
-}
-
-
-void matchDescriptorsKNN( const Mat& queryDescriptors, vector<vector<DMatch> >& matches, Ptr<DescriptorMatcher>& descriptorMatcher, int k)
-{
-  // Assumes training descriptors have already been added to descriptorMatcher
-  //cout << "< Set train descriptors collection in the matcher and match query descriptors to them..." << endl;
-    //descriptorMatcher->add( trainDescriptors );
-  descriptorMatcher->knnMatch( queryDescriptors, matches, k );
-  CV_Assert( queryDescriptors.rows == (int)matches.size() || matches.empty() );
-  //cout << ">" << endl;
-}
-
-
-// TODO: make functions called often inline
-
-
-// ==============================================
-// Helpers - conversion functions
-// ==============================================
-vnl_matrix<double> convertVnlVectorToMatrix(const vnl_double_3& v)
-{
-  vnl_matrix<double> result(3,1);
-  result(0,0) = v[0];
-  result(1,0) = v[1];
-  result(2,0) = v[2];
-  return result;
-}
-
-vnl_double_3 convertVnlMatrixToVector(const vnl_matrix<double>& m)
-{
-  vnl_double_3 result;
-  if(m.rows()==1 && m.cols()==3) {
-    for(int i=0; i<3; i++)
-      result[i] = m(0,i);
-  }
-  else if(m.rows()==3 && m.cols()==1) {
-    for(int i=0; i<3; i++)
-      result[i] = m(i,0);
-  }
-  return result;
-}
-
-vnl_double_3 arrayToVnlDouble(double arr[4])
-{
-  vnl_double_3 result;
-  result[0]=arr[0];
-  result[1]=arr[1];
-  result[2]=arr[2];
-  return result;
-}
-
-void vnlToArrayDouble(vnl_double_3 v, double arr[4])
-{
-  arr[0]=v[0];
-  arr[1]=v[1];
-  arr[2]=v[2];
-  arr[3]=1.0;
-}
-
-std::vector<float> vtkToStdMatrix(vtkMatrix4x4* matrix)
-{
-  std::vector<float> result;
-  for(int i=0; i<3; i++)
-  {
-    for(int j=0; j<4; j++)
-      result.push_back(matrix->GetElement(i,j));
-  }
-
-  return result;
-}
-
-void vnlToVtkMatrix(const vnl_matrix<double> vnlMatrix , vtkMatrix4x4* vtkMatrix)
-{
-  vtkMatrix->Identity();
-  int rows = vnlMatrix.rows();
-  int cols = vnlMatrix.cols();
-  if(rows > 4)
-    rows = 4;
-  if(cols > 4)
-    cols = 4;
-  for(int i=0; i<rows; i++)
-  {
-    for(int j=0; j<cols; j++)
-      vtkMatrix->SetElement(i,j,vnlMatrix(i,j));
-  }
-}
-
-void getVtkMatrixFromVector(const std::vector<float>& vec, vtkMatrix4x4* vtkMatrix)
-{
-  vtkMatrix->Identity();
-  if(vec.size() < 12)
-    return;
-  for(int i=0; i<3; i++)
-    for(int j=0; j<4; j++)
-    vtkMatrix->SetElement(i,j,vec[i*4+j]);
-}
 
 // =======================================================
 // Image manipulation and conversion
@@ -1094,7 +739,6 @@ vtkSlicerSurfFeaturesLogic::~vtkSlicerSurfFeaturesLogic()
 
 vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
 {
-  this->node = NULL;
   this->lastStopWatch = clock();
   this->initTime = clock();
   this->ransacMargin = 1.0;
@@ -1152,7 +796,14 @@ vtkSlicerSurfFeaturesLogic::vtkSlicerSurfFeaturesLogic()
   this->matchNode = vtkMRMLScalarVolumeNode::New();
   this->matchNode->SetName("match node");
 
+  this->node = vtkMRMLScalarVolumeNode::New();
+  this->node->SetName("node");
+  this->nodeResliced = vtkMRMLScalarVolumeNode::New();
+  this->nodeResliced->SetName("resliced node");
+
   this->Modified();
+
+
 }
 
 void vtkSlicerSurfFeaturesLogic::setQueryProgress(int p){
@@ -1429,6 +1080,8 @@ void vtkSlicerSurfFeaturesLogic::computeKeypointsAndDescriptors(const cv::Mat& d
 {
   // Get the descriptor of the current image
   cv::SurfFeatureDetector detector(this->minHessian);
+
+  // Find Keypoints
   detector.detect(data,keypoints,this->croppedMask);
 
   // Get keypoints' surf descriptors
@@ -1631,7 +1284,7 @@ void vtkSlicerSurfFeaturesLogic::updateQueryNode()
     return;
   vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
   vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
-  getVtkMatrixFromVector(this->queryImagesTransform[this->currentImgIndex], transform);
+  convertMhaTransformToVtkMatrix(this->queryImagesTransform[this->currentImgIndex], transform);
   combinedTransform->Concatenate(transform);
   combinedTransform->Concatenate(this->ImageToProbeTransform);
   vtkSmartPointer<vtkMatrix4x4> matrix = combinedTransform->GetMatrix();
@@ -1672,7 +1325,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNode()
   int trainIndex = this->bestMatches[this->currentImgIndex];
   vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
   vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
-  getVtkMatrixFromVector(this->trainImagesTransform[trainIndex], transform);
+  convertMhaTransformToVtkMatrix(this->trainImagesTransform[trainIndex], transform);
   combinedTransform->Concatenate(transform);
   combinedTransform->Concatenate(this->ImageToProbeTransform);
   vtkSmartPointer<vtkMatrix4x4> matrix = combinedTransform->GetMatrix();
@@ -1712,7 +1365,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   
   // Find the ground truth transform
   vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
-  getVtkMatrixFromVector(this->queryImagesTransform[this->currentImgIndex], transform);
+  convertMhaTransformToVtkMatrix(this->queryImagesTransform[this->currentImgIndex], transform);
   vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
   combinedTransform->Concatenate(transform);
   combinedTransform->Concatenate(this->ImageToProbeTransform);
@@ -1736,7 +1389,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
     // Compute transform matrix for the image of this training keypoint
     vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
     vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
-    getVtkMatrixFromVector(this->trainImagesTransform[imgIdx], transform);
+    convertMhaTransformToVtkMatrix(this->trainImagesTransform[imgIdx], transform);
     combinedTransform->Concatenate(transform);
     combinedTransform->Concatenate(this->ImageToProbeTransform);
     vtkSmartPointer<vtkMatrix4x4> matrix = vtkSmartPointer<vtkMatrix4x4>::New();
@@ -1925,7 +1578,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   writeMatlabFile(queryPoints, trainPoints, inliersIdx, groundTruth, estimate, this->queryImages[this->currentImgIndex].cols, this->queryImages[this->currentImgIndex].rows);
 
   // Store the estimate
-  //this->queryTransformEstimate[this->currentImgIndex] = vtkToStdMatrix(estimate);
+  //this->queryTransformEstimate[this->currentImgIndex] = convertVtkMatrix4x4ToMhaTransform(estimate);
 
 
   // Print estimate and groundtruth
@@ -1964,6 +1617,174 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
 
 void vtkSlicerSurfFeaturesLogic::nextImage()
 {
+   // read a slice from an mha file
+  string filename = "C:\\Users\\DanK\\MProject\\data\\MNI\\group1\\01\\pre\\sweep_1a\\sweep_1a.mha";
+  vector<Mat> images;
+  vector<string> filenames;
+  vector<bool> transformsValidity;
+  vector<vector<float> > transforms;
+  vector<int> frames;
+  frames.push_back(100);
+  read_mha(filename, images, filenames, transforms, transformsValidity, frames);
+
+  vnl_matrix<double> transformMatrix = convertMhaTransformToVnlMatrix(transforms[0]);
+  vnl_matrix<double> normalizedTransformMatrix = transformMatrix;
+  normalizedTransformMatrix.normalize_columns();
+
+  // Read in the 3d image
+  ReaderType::Pointer reader = ReaderType::New();
+  reader->SetImageIO(itk::NiftiImageIO::New());
+  reader->SetFileName("C:/Users/DanK/MProject/data/MNI/analyze3dus/1a.3dus.nii");
+  reader->Update();
+  ImageType::Pointer itkImage = reader->GetOutput();
+ 
+  vnl_matrix<itk::ImageBase<Dimension>::DirectionType::InternalMatrixType::element_type> direction = itkImage->GetDirection().GetVnlMatrix();
+  itk::ImageBase<Dimension>::PointType origin = itkImage->GetOrigin();
+  itk::ImageBase<Dimension>::SpacingType spacing = itkImage->GetSpacing();
+  vnl_matrix_fixed<double, Dimension+1, Dimension+1> intermediateMatrix;
+  vnl_matrix_fixed<double, Dimension+1, Dimension+1> directionMatrix;
+  vnl_matrix_fixed<double, Dimension+1, Dimension+1> LPStoRASMatrix;
+  vnl_matrix_fixed<double, Dimension+1, Dimension+1> IJKtoRASMatrix;
+  vnl_vector_fixed<double, Dimension+1> spacingVec;
+  vnl_vector_fixed<double, Dimension+1> originVec;
+  originVec.fill(1);
+  originVec.update(origin.Get_vnl_vector());
+  spacingVec.fill(1);
+  spacingVec.update(spacing.Get_vnl_vector());
+  intermediateMatrix.set_identity();
+  intermediateMatrix.set_diagonal(spacingVec);
+  intermediateMatrix.set_column(3,originVec.data_block());
+  directionMatrix.set_identity();
+  directionMatrix.update(direction);
+  LPStoRASMatrix.set_identity();
+  LPStoRASMatrix(0,0) = -1;
+  LPStoRASMatrix(1,1) = -1;
+  IJKtoRASMatrix = LPStoRASMatrix * (intermediateMatrix * directionMatrix);
+
+
+  
+  imageToVTKImageFilterType::Pointer toVtkFilter = imageToVTKImageFilterType::New();
+  toVtkFilter->SetInput(reader->GetOutput());
+  toVtkFilter->Update();
+  vtkSmartPointer<vtkImageData> data = vtkSmartPointer<vtkImageData>::New();
+  data->DeepCopy(toVtkFilter->GetOutput());
+  int* dim;
+  dim = data->GetDimensions();
+  data->SetSpacing(IJKtoRASMatrix.get_diagonal().extract(3).data_block());
+  data->SetOrigin(IJKtoRASMatrix.get_column(3).extract(3).data_block());
+  vtkSmartPointer<vtkImageReslice> imageReslice = vtkSmartPointer<vtkImageReslice>::New();
+  imageReslice->SetInput(data);
+  imageReslice->SetInformationInput(data);
+  vnl_matrix<double> cosines = normalizedTransformMatrix.extract(3,3);
+  vnl_matrix<double> frameOrigin = transformMatrix.extract(3,1,0,3);
+  vnl_matrix<double> frameCenter = frameOrigin + transformMatrix.extract(3,1)*images[0].cols/2 + transformMatrix.extract(3,1,0,1)*images[0].rows/2;
+  imageReslice->SetResliceAxesDirectionCosines(cosines.transpose().data_block());
+  imageReslice->SetResliceAxesOrigin(frameCenter.data_block());
+  imageReslice->SetOutputDimensionality(2);
+  imageReslice->Update();
+  vtkImageData* reslicedImage = imageReslice->GetOutput();
+  vtkIdType id = reslicedImage->FindPoint(0.,0.,0.);
+  double x[3] = {0.,0.,0.};
+  double pcoords[3];
+  int ijk[3];
+  reslicedImage->ComputeStructuredCoordinates(x,ijk,pcoords);
+  vnl_matrix<double> newOrigin(3,1,0.);
+  newOrigin -= cosines.extract(3,1)*ijk[0]*reslicedImage->GetSpacing()[0];
+  newOrigin -= cosines.extract(3,1,0,1)*ijk[1]*reslicedImage->GetSpacing()[1];
+  newOrigin += frameCenter;
+
+  vnl_matrix<double> IJKtoRASResliced = normalizedTransformMatrix;
+  IJKtoRASResliced(0,0) *= reslicedImage->GetSpacing()[0];
+  IJKtoRASResliced(1,0) *= reslicedImage->GetSpacing()[0];
+  IJKtoRASResliced(2,0) *= reslicedImage->GetSpacing()[0];
+  IJKtoRASResliced(0,1) *= reslicedImage->GetSpacing()[1];
+  IJKtoRASResliced(1,1) *= reslicedImage->GetSpacing()[1];
+  IJKtoRASResliced(2,1) *= reslicedImage->GetSpacing()[1];
+  IJKtoRASResliced(0,2) *= reslicedImage->GetSpacing()[2];
+  IJKtoRASResliced(1,2) *= reslicedImage->GetSpacing()[2];
+  IJKtoRASResliced(2,2) *= reslicedImage->GetSpacing()[2];
+  IJKtoRASResliced(0,3) = 0;
+  IJKtoRASResliced(1,3) = 0;
+  IJKtoRASResliced(2,3) = 0;
+  IJKtoRASResliced(3,3) = 1.;
+  IJKtoRASResliced.update(newOrigin, 0,3);
+  IJKtoRASResliced.print(cout);
+
+  vtkSmartPointer<vtkMatrix4x4> reslicedTransform = vtkSmartPointer<vtkMatrix4x4>::New();
+  vtkSmartPointer<vtkMatrix4x4> originalTransform = vtkSmartPointer<vtkMatrix4x4>::New();
+  convertVnlMatrixToVtkMatrix4x4(IJKtoRASResliced, reslicedTransform);
+  convertVnlMatrixToVtkMatrix4x4(transformMatrix, originalTransform);
+
+  float* reslicedPointer = (float*)reslicedImage->GetScalarPointer();
+  float* dataPointer = (float*)data->GetScalarPointer();
+
+  unsigned char* reslicedUChar = new unsigned char[reslicedImage->GetNumberOfPoints()];
+  unsigned char* reslicedMask = new unsigned char[reslicedImage->GetNumberOfPoints()];
+
+  for(vtkIdType i=0; i<reslicedImage->GetNumberOfPoints(); i++)
+  {
+    reslicedUChar[i] = (unsigned char)(reslicedPointer[i]*255.);
+    if(reslicedPointer[i] == 0)
+      reslicedMask[i] = 0;
+    else
+      reslicedMask[i] = 255;
+    //double* pos = reslicedImage->GetPoint(i);
+    //if(reslicedPointer != 0){
+    //  cout << "hello";
+    //}
+  }
+
+  // Convert the image to opencv
+  dim = reslicedImage->GetDimensions();
+  Mat img(dim[1], dim[0], CV_8U, reslicedUChar);
+  Mat mask(dim[1], dim[0], CV_8U, reslicedMask);
+  this->tempImage = img.clone();
+  this->tempImage1 = images[0].clone();
+
+
+  int width = tempImage1.cols;
+  int height = tempImage1.rows;
+  vtkSmartPointer<vtkImageImport> importer = vtkSmartPointer<vtkImageImport>::New();
+  // TODO: check type of opencv image data first...
+  importer->SetDataScalarTypeToUnsignedChar();
+  importer->SetImportVoidPointer(tempImage1.data,1); // Save argument to 1 won't destroy the pointer when importer destroyed
+  importer->SetWholeExtent(0,width-1,0, height-1, 0, 0);
+  importer->SetDataExtentToWholeExtent();
+  importer->Update();
+  // You've got to keep a reference of that vtkimage data somewhere, because the node does not make a deep copy in SetAndObserveImageData
+
+  this->nodeImageData = importer->GetOutput();
+  //this->nodeReslicedImageData = reslicedImage;
+
+  width = tempImage.cols;
+  height = tempImage.rows;
+  vtkSmartPointer<vtkImageImport> importer1 = vtkSmartPointer<vtkImageImport>::New();
+  // TODO: check type of opencv image data first...
+  importer1->SetDataScalarTypeToUnsignedChar();
+  importer1->SetImportVoidPointer(tempImage.data,1); // Save argument to 1 won't destroy the pointer when importer destroyed
+  importer1->SetWholeExtent(0,width-1,0, height-1, 0, 0);
+  importer1->SetDataExtentToWholeExtent();
+  importer1->Update();
+  // You've got to keep a reference of that vtkimage data somewhere, because the node does not make a deep copy in SetAndObserveImageData
+
+  this->nodeImageData = importer->GetOutput();
+  this->nodeReslicedImageData = importer1->GetOutput();
+
+  // Makes a deep copy of the matrix
+  this->node->SetIJKToRASMatrix(originalTransform);
+  this->nodeResliced->SetIJKToRASMatrix(reslicedTransform);
+  // vtkImage shares pointer with opencv image
+  this->node->SetAndObserveImageData(this->nodeImageData);
+  this->nodeResliced->SetAndObserveImageData(this->nodeReslicedImageData);
+
+  this->GetMRMLScene()->AddNode(this->node);
+  this->GetMRMLScene()->AddNode(this->nodeResliced);
+
+  delete [] reslicedUChar;
+  delete [] reslicedMask;
+
+  if(this->queryImages.size() == 0)
+    return;
   this->currentImgIndex += 1;
   if(this->currentImgIndex >= this->queryImages.size())
     this->currentImgIndex = 0;
@@ -2324,7 +2145,7 @@ void vtkSlicerSurfFeaturesLogic::writeMatches()
   std::vector<double> cornersTrain;
   for(int i=0; i<queryImages.size(); i++) {
     vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
-    getVtkMatrixFromVector(this->queryImagesTransform[i], transform);
+    convertMhaTransformToVtkMatrix(this->queryImagesTransform[i], transform);
     vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
     combinedTransform->Concatenate(transform);
     combinedTransform->Concatenate(this->ImageToProbeTransform);
@@ -2339,7 +2160,7 @@ void vtkSlicerSurfFeaturesLogic::writeMatches()
   
   for(int i=0; i<trainImages.size(); i++) {
     vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
-    getVtkMatrixFromVector(this->trainImagesTransform[i], transform);
+    convertMhaTransformToVtkMatrix(this->trainImagesTransform[i], transform);
     vtkSmartPointer<vtkTransform> combinedTransform = vtkSmartPointer<vtkTransform>::New();
     combinedTransform->Concatenate(transform);
     combinedTransform->Concatenate(this->ImageToProbeTransform);
