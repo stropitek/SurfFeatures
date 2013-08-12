@@ -276,17 +276,6 @@ int read_mha(
 }
 
 
-void matchDescriptorsKNN( const Mat& queryDescriptors, vector<vector<DMatch> >& matches, Ptr<DescriptorMatcher>& descriptorMatcher, int k)
-{
-  // Assumes training descriptors have already been added to descriptorMatcher
-  //cout << "< Set train descriptors collection in the matcher and match query descriptors to them..." << endl;
-    //descriptorMatcher->add( trainDescriptors );
-  descriptorMatcher->knnMatch( queryDescriptors, matches, k );
-  CV_Assert( queryDescriptors.rows == (int)matches.size() || matches.empty() );
-  //cout << ">" << endl;
-}
-
-
 
 // ==============================================
 // Helpers - conversion functions
@@ -382,4 +371,707 @@ vnl_matrix<double> convertMhaTransformToVnlMatrix(const vector<float>& vec)
       result(i,j)=vec[i*4+j];
   }
   return result;
+}
+
+// ==================================
+// OpenCV
+// ==================================
+void computeKeypointsAndDescriptors(const cv::Mat& data,\
+                                    const cv::Mat& mask,\
+                                    std::vector<cv::KeyPoint> &keypoints,\
+                                    cv::Mat &descriptors,\
+                                    int minHessian)
+{
+  // Get the descriptor of the current image
+  cv::SurfFeatureDetector detector(minHessian);
+
+  // Find Keypoints
+  detector.detect(data,keypoints,mask);
+
+  // Get keypoints' surf descriptors
+  cv::SurfDescriptorExtractor extractor;
+  extractor.compute(data, keypoints, descriptors);
+}
+
+void matchDescriptors( const Mat& queryDescriptors, vector<DMatch>& matches, Ptr<DescriptorMatcher> descriptorMatcher )
+{
+	// Assumes training descriptors have already been added to descriptorMatcher
+    descriptorMatcher->match( queryDescriptors, matches );
+    CV_Assert( queryDescriptors.rows == (int)matches.size() || matches.empty() );
+}
+
+void matchDescriptorsKNN( const Mat& queryDescriptors, vector<vector<DMatch> >& matches, Ptr<DescriptorMatcher> descriptorMatcher, int k)
+{
+  // Assumes training descriptors have already been added to descriptorMatcher
+  descriptorMatcher->knnMatch( queryDescriptors, matches, k );
+  CV_Assert( queryDescriptors.rows == (int)matches.size() || matches.empty() );
+}
+
+int maskMatchesByMatchPresent( const vector<DMatch>& matches, vector<char>& mask )
+{
+	int iCount = 0;
+    for( size_t i = 0; i < matches.size(); i++ )
+    {
+		if( matches[i].queryIdx <= 0 )
+            mask[i] = 0;
+		if( mask[i] > 0 )
+		{
+			iCount++;
+		}
+    }
+	return iCount;
+}
+
+int maskMatchesByTrainImgIdx( const vector<DMatch>& matches, int trainImgIdx, vector<char>& mask )
+{
+	int iCount = 0;
+    mask.resize( matches.size() );
+    fill( mask.begin(), mask.end(), 0 );
+    for( size_t i = 0; i < matches.size(); i++ )
+    {
+        if( matches[i].imgIdx == trainImgIdx )
+		{
+            mask[i] = 1;
+			iCount++;
+		}
+    }
+	return iCount;
+}
+
+cv::Mat getResultImage( const Mat& queryImage, const vector<KeyPoint>& queryKeypoints,\
+                     const Mat& trainImage, const vector<KeyPoint>& trainKeypoints,\
+                     const vector<DMatch>& matches,int iTrainImageIndex)
+{
+    cout << "< Save results..." << endl;
+    Mat drawImg;
+    vector<char> mask;
+    mask.resize( matches.size() );
+    fill( mask.begin(), mask.end(), 0 );
+    for( size_t i = 0; i < matches.size(); i++ )
+    {
+        if( abs( matches[i].imgIdx - iTrainImageIndex ) <= 1 )
+            mask[i] = 1;
+    }
+
+	maskMatchesByTrainImgIdx( matches, iTrainImageIndex, mask );
+	maskMatchesByMatchPresent( matches, mask );
+	drawMatches( queryImage, queryKeypoints, trainImage, trainKeypoints,
+		matches, drawImg, Scalar::all(-1), Scalar::all(-1), mask, DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS | DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
+  return drawImg;
+}
+
+vector<int> countVotes(const vector<DMatch>& matches, int trainSize)
+{
+  vector<int> votes;
+  votes.resize(trainSize);
+  for(int i=0; i<matches.size(); i++)
+  {
+    if (matches[i].imgIdx != -1)
+      votes[matches[i].imgIdx]++;
+  }
+  return votes;
+}
+
+vector<DMatch> getValidMatches(const vector<vector<DMatch> >& matches)
+{
+  vector<DMatch> validMatches;
+  for(int i=0; i<matches.size(); i++)
+  {
+    if(matches[i][0].imgIdx >= 0)
+      validMatches.push_back(matches[i][0]);
+  }
+  return validMatches;
+}
+
+vector<DMatch> filterValidMatches(const vector<DMatch>& matches)
+{
+  vector<DMatch> validMatches;
+  for(int i=0; i<matches.size(); i++)
+  {
+    if(matches[i].imgIdx >= 0)
+      validMatches.push_back(matches[i]);
+  }
+  return validMatches;
+}
+
+vector<DMatch> filterBogus(const vector<DMatch>& matches, const vector<DMatch>& bmatches, int threshold)
+{
+  vector<DMatch> filtered;
+  // Disable best matches if they also have a good match with bogus data
+  for( int j = 0; j < matches.size(); j++ )
+  {
+    float fRatio = matches[j].distance / bmatches[j].distance;
+    if( fRatio < threshold )
+    {
+      filtered.push_back(matches[j]);
+    }
+  }
+  return filtered;
+}
+
+
+vector<DMatch> filterSmoothAndThreshold(const vector<int>& votes, const vector<DMatch> matches)
+{
+  vector<DMatch> smoothMatches;
+  vector< int > votesSmooth(votes.size(), 0);
+
+  for( int j = 0; j < votes.size(); j++ )
+  {
+    // Smooth the # of matches curve by convultion with [1 1 1].
+    votesSmooth[j] = votes[j];
+    if( j > 0 ) votesSmooth[j] += votes[j-1];
+    if( j < votes.size()-1 ) votesSmooth[j] += votes[j+1];
+  }
+
+  vector<int> flags;
+  flags.resize(votes.size());
+
+    // votes is reinitilised. It will now store flags.
+  for( int j = 0; j < votesSmooth.size(); j++ )
+  {
+    flags[j] = 0;
+  }
+  for( int j = 0; j < votesSmooth.size(); j++ )
+  {
+      // If training image has more than 2 matches (after smoothing), flag the training image and its immediate neighborhood.
+    if( votesSmooth[j] >= 2 )
+    {
+        // flag neighborhood
+      flags[j] = 1;
+      if( j > 0 ) flags[j-1]=1;
+      if( j < flags.size()-1 ) flags[j+1]=1;
+    }
+  }
+
+  // Save matches
+  smoothMatches.clear();
+  for( int j = 0; j < votesSmooth.size(); j++ )
+  {
+      // Discard unflagged train images
+    if( votes[j] > 0 )
+    {
+      for( int k = 0; k < matches.size(); k++ )
+      {
+        int iImg =  matches[k].imgIdx;
+        if( iImg == j )
+        {
+          smoothMatches.push_back( matches[k] );
+        }
+      }
+    }
+  }
+
+      // This commented part here would be I think a more efficient way for the block just above this
+    //for(int k=0; k < matches.size(); k++)
+    //{
+    //  iImg = matches[k].imgIdx;
+    //  if( votes[imgIdx] > 0 )
+    //    continue;
+    //  vmMatchesSmooth.push_back( matches[k] );
+    //}
+  return smoothMatches;
+}
+
+void computeCentroid(const cv::Mat& mask, int& x, int& y)
+{
+  float rowcentroid=0;
+  float colcentroid=0;
+  int count = 0;
+  for(int i=0; i<mask.rows; i++)
+  {
+    for(int j=0; j<mask.cols; j++)
+    {
+      if(mask.at<unsigned char>(i,j) > 0)
+      {
+        rowcentroid += i;
+        colcentroid += j;
+        count += 1;
+      }
+    }
+  }
+  rowcentroid /= count;
+  colcentroid /= count;
+  y = (int)rowcentroid;
+  x = (int)colcentroid;
+}
+
+// =======================================================
+// Helpers - geometry functions
+// =======================================================
+vnl_matrix<double> getRotationMatrix(vnl_double_3 & axis, double theta)
+{
+  vnl_matrix<double> result(3,3);
+  result(0,0) = cos(theta)+axis[0]*axis[0]*(1-cos(theta));
+  result(0,1) = axis[0]*axis[1]*(1-cos(theta))-axis[2]*sin(theta);
+  result(0,2) = axis[0]*axis[2]*(1-cos(theta))+axis[1]*sin(theta);
+  result(1,0) = axis[1]*axis[0]*(1-cos(theta))+axis[2]*sin(theta);
+  result(1,1) = cos(theta)+axis[1]*axis[1]*(1-cos(theta));
+  result(1,2) = axis[1]*axis[2]*(1-cos(theta))-axis[0]*sin(theta);
+  result(2,0) = axis[2]*axis[0]*(1-cos(theta))-axis[1]*sin(theta);
+  result(2,1) = axis[2]*axis[1]*(1-cos(theta))+axis[0]*sin(theta);
+  result(2,2) = cos(theta)+axis[2]*axis[2]*(1-cos(theta));
+  result.normalize_columns();
+  return result;
+}
+
+vnl_double_3 projectPoint(vnl_double_3 point, vnl_double_3 normalToPlane, double offset)
+{
+  normalToPlane.normalize();
+  double dist = dot_product(point, normalToPlane) + offset;
+  vnl_double_3 vec = dist*normalToPlane;
+  return point - vec;
+}
+
+void getPlaneFromPoints(vnl_double_3 p1, vnl_double_3 p2, vnl_double_3 p3, vnl_double_3& normal, double& d)
+{
+  vnl_double_3 v1,v2;
+    v1 = p1-p2;
+    v2 = p1-p3;
+    v1.normalize();
+    v2.normalize();
+
+    normal = vnl_cross_3d(v1,v2);       // Because (a,b,c) is given by normal vector
+    normal.normalize();
+    d = -dot_product(p1,normal);      // Because a.x1+b.x2+c.x3+d=0
+}
+
+double getAngle(const vnl_double_3& u, const vnl_double_3& v)
+{
+  // Get the angle (caution not signed!) use atan2 for signed angle in 2d plane
+  return acos(dot_product(u,v)/(u.two_norm()*v.two_norm()));
+}
+
+void getAxisAndRotationAngle(vnl_double_3 v, vnl_double_3 v_new, vnl_double_3& axis, double& angle)
+{
+  axis = vnl_cross_3d(v, v_new);
+  angle = getAngle(v,v_new);
+}
+
+vnl_double_3 transformPoint(const vnl_double_3 in, vtkMatrix4x4* transform)
+{
+  double point[4];
+  vnlToArrayDouble(in, point);
+  double point_t[4];
+  transform->MultiplyPoint(point, point_t);
+  return arrayToVnlDouble(point_t);
+}
+
+double computeMeanDistance(const std::vector<vnl_double_3>& x1, const std::vector<vnl_double_3>& x2)
+{
+  if(x1.size() != x2.size())
+    return DBL_MAX;
+  double result = 0.;
+  for(int i=0; i<x1.size(); i++)
+  {
+    vnl_double_3 diff = x1[i]-x2[i];
+    result += diff.two_norm();
+  }
+  result /= x1.size();
+  return result;
+}
+
+vnl_double_3 computeTranslation(vnl_double_3 u, vnl_double_3 v, vnl_double_3 w, vnl_double_3 trainCentroid, vnl_double_3 queryCentroid)
+{
+  vnl_double_3 t;
+  t[0] = trainCentroid[0] - (u[0]*queryCentroid[0] + v[0]*queryCentroid[1] + w[0]*queryCentroid[2]);
+  t[1] = trainCentroid[1] - (u[1]*queryCentroid[0] + v[1]*queryCentroid[1] + w[1]*queryCentroid[2]);
+  t[2] = trainCentroid[2] - (u[2]*queryCentroid[0] + v[2]*queryCentroid[1] + w[2]*queryCentroid[2]);
+  return t;
+}
+
+void setEstimate(vtkMatrix4x4* estimate, const vnl_double_3& u, const vnl_double_3& v, const vnl_double_3& w, const vnl_double_3& t)
+{
+  estimate->SetElement(0,0,u[0]);
+  estimate->SetElement(1,0,u[1]);
+  estimate->SetElement(2,0,u[2]);
+  estimate->SetElement(0,1,v[0]);
+  estimate->SetElement(1,1,v[1]);
+  estimate->SetElement(2,1,v[2]);
+  estimate->SetElement(0,2,w[0]);
+  estimate->SetElement(1,2,w[1]);
+  estimate->SetElement(2,2,w[2]);
+  estimate->SetElement(0,3,t[0]);
+  estimate->SetElement(1,3,t[1]);
+  estimate->SetElement(2,3,t[2]);
+}
+
+// ===========================================
+// Helpers - other
+// ===========================================
+void computeCorners(std::vector<vnl_double_3>& result, vtkMatrix4x4* transform, int maxX, int maxY) {
+  vnl_double_3 p1, p2, p3, p4;
+  p1[0]=0; p1[1]=0; p1[2]=0;
+  p2[0]=0; p2[1]=maxY; p2[2]=0;
+  p3[0]=maxX; p3[1]=maxY; p3[2]=0;
+  p4[0]=maxX; p4[1]=0; p4[2]=0;
+
+  result.push_back(transformPoint(p1, transform));
+  result.push_back(transformPoint(p2, transform));
+  result.push_back(transformPoint(p3, transform));
+  result.push_back(transformPoint(p4, transform));
+}
+
+// =======================================================
+// Image manipulation and conversion
+// =======================================================
+vtkImageData* cropData(vtkImageData* data, float cropRatios[4])
+{
+  int dims[3];
+  data->GetDimensions(dims);
+  vtkSmartPointer<vtkExtractVOI> extractVOI = vtkSmartPointer<vtkExtractVOI>::New();
+  extractVOI->SetInput(data);
+  extractVOI->SetVOI(dims[0]*cropRatios[0],dims[0]*cropRatios[1],dims[1]*cropRatios[2],dims[1]*cropRatios[3], 0, 0);
+  extractVOI->SetSampleRate(1,1,1);
+  extractVOI->Update();
+  return extractVOI->GetOutput();
+}
+
+void cropData(cv::Mat& img, float cropRatios[4])
+{
+  cv::Size size = img.size();
+  cv::Rect roi(size.width*cropRatios[0], size.height*cropRatios[2],\
+    size.width*(cropRatios[1]-cropRatios[0]), size.height*(cropRatios[3]-cropRatios[2]));
+  // Clone the image to physically crop the image (not just jumping on same pointer)
+  img = img(roi).clone();
+}
+
+cv::Mat convertImage(vtkImageData* image)
+{
+  int dims[3];
+  image->GetDimensions(dims);
+
+  // TODO: Make sure the pointer is unsigned char... or use the proper opencv type...
+    cv::Mat ocvImage(dims[1],dims[0],CV_8U ,image->GetScalarPointer());
+  // Clone the image so you don't share the pointer with vtkImageData
+  return ocvImage.clone();
+}
+
+// ===========================================
+// Hough Transform
+// ===========================================
+
+class HoughCodeSimilarity
+{
+public:
+
+  HoughCodeSimilarity(
+    )
+  {
+    m_fAngleToBooth = -1;
+    m_fDistanceToBooth = -1;
+    m_fAngleDiff = -1;
+    m_fScaleDiff = -1;
+  }
+
+  ~HoughCodeSimilarity(
+    )
+  {
+  }
+
+
+  int
+    SetHoughCode(
+    const float &fPollRow,	// Poll booth row
+    const float &fPollCol,	// Poll booth col
+    const float &fPollOri,	// Poll booth orientation
+    const float &fPollScl	// Poll booth scale
+    )
+  {
+    // Set distance to poll booth
+    float fDiffRow = fPollRow - m_Key_fRow;
+    float fDiffCol = fPollCol - m_Key_fCol;
+    float fDistSqr = fDiffCol*fDiffCol + fDiffRow*fDiffRow;
+    m_fDistanceToBooth = (float)sqrt( fDistSqr );
+
+    // Set angle between feature orientation and poll booth
+    float fAngleToBooth = (float)atan2( fDiffRow, fDiffCol );
+    m_fAngleToBooth = fAngleToBooth;
+
+    // Set angular and orientation differences
+    m_fAngleDiff = fPollOri - m_Key_fOri;
+    m_fScaleDiff = fPollScl / m_Key_fScale;
+
+    return 0;
+  }
+
+  int
+    FindPollBooth(
+    const float &fRow,
+    const float &fCol,
+    const float &fOri,
+    const float &fScale,
+    float &fPollRow,		// Return row value
+    float &fPollCol,		// Return col value,
+    float &fPollOri,		// Return orientation value
+    float &fPollScl,		// Return scale value
+    int   bMirror	= 0// Match is a mirror of this feature
+    ) const
+  {
+    if( !bMirror )
+    {
+      float fOriDiff = fOri - m_Key_fOri;
+      float fScaleDiff = fScale / m_Key_fScale;
+
+      float fDist = m_fDistanceToBooth*fScaleDiff;
+      float fAngle = m_fAngleToBooth + fOriDiff;
+
+      fPollRow = (float)(sin( fAngle )*fDist + fRow);
+      fPollCol = (float)(cos( fAngle )*fDist + fCol);
+
+      fPollOri = fOri + m_fAngleDiff;
+      fPollScl = m_fScaleDiff*fScale;
+    }
+    else
+    {
+      // Here, we consider a mirrored poll both
+      float fOriDiff = fOri - (-m_Key_fOri);
+      float fScaleDiff = fScale / m_Key_fScale;
+
+      float fDist = m_fDistanceToBooth*fScaleDiff;
+      float fAngle = (-m_fAngleToBooth) + fOriDiff;
+
+      fPollRow = (float)(sin( fAngle )*fDist + fRow);
+      fPollCol = (float)(cos( fAngle )*fDist + fCol);
+
+      fPollOri = fOri - m_fAngleDiff;
+      fPollScl = m_fScaleDiff*fScale;
+    }
+
+    return 0;
+  }
+
+
+
+  float m_fAngleToBooth;	// With just this, we can draw a line through to the booth
+  float m_fDistanceToBooth;	// With just this, we can draw a circle through booth
+
+  float m_fAngleDiff;		// Poll booth angle - key angle
+  float m_fScaleDiff;		// Poll booth scale / key scale
+
+  float m_Key_fRow;
+  float m_Key_fCol;
+  float m_Key_fOri;
+  float m_Key_fScale;
+
+};
+
+class KeypointGeometry
+{
+public:
+  KeypointGeometry(){};
+  ~KeypointGeometry(){};
+
+  int iIndex0;
+  int iIndex1;
+
+  float m_Key_fRow;
+  float m_Key_fCol;
+  float m_Key_fOri;
+  float m_Key_fScale;	
+};
+
+
+
+
+float angle_radians(float fAngle )
+{
+  return (2.0f*PI*fAngle) / 180.0f;
+}
+
+
+
+int
+  compatible_poll_booths_line_segment(
+  float fTrainingCol,
+  float fTrainingRow,
+  float fTrainingOri,
+  float fTrainingScl,
+  float fPollCol,
+  float fPollRow,
+  float fPollOri,
+  float fPollScl,
+  float fTranslationErrorThres,
+  float fScaleErrorThres,
+  float fOrientationErrorThres
+  )
+{
+  float fLogTrainingPollScl = log( fTrainingScl );
+  float fLogPollScl = log( fPollScl );
+  float fLogSclDiff = fabs( fLogTrainingPollScl - fLogPollScl );
+
+  float fDiffCol = fPollCol - fTrainingCol;
+  float fDiffRow = fPollRow - fTrainingRow;
+  float fDistDiff = sqrt( fDiffCol*fDiffCol + fDiffRow*fDiffRow );
+
+  float fOriDiff = fPollOri > fTrainingOri ?
+    fPollOri - fTrainingOri : fTrainingOri - fPollOri;
+  assert( fOriDiff >= 0 && fOriDiff < 2*PI );
+  if( fOriDiff > (2*PI - fOriDiff) )
+  {
+    fOriDiff = (2*PI - fOriDiff);
+  }
+  assert( fOriDiff >= 0 && fOriDiff < 2*PI );
+
+  // If the best match and this feature are within the match
+  // hypothesis
+
+  //if(		fDistDiff	< TRANSLATION_ERROR*fTrainingScl
+  //	&&	fLogSclDiff	< SCALE_DIFF
+  //	&&	fOriDiff	< ORIENTATION_DIFF
+  //	)
+  if(		fDistDiff	< fTranslationErrorThres*fTrainingScl
+    &&	fLogSclDiff	< fScaleErrorThres
+    &&	fOriDiff	< fOrientationErrorThres
+    )
+  {
+    return 1;
+  }
+  else
+  {
+    return 0;
+  }
+}
+
+int
+  houghTransform(
+  const vector<KeyPoint>& queryKeypoints,
+  const vector< vector<KeyPoint> > & trainKeypoints,
+  vector<DMatch> & matches,
+  int refx, int refy
+  )
+{
+  float fRefX;
+  float fRefY;
+
+  vector< KeypointGeometry > vecKG;
+  //vecKG.resize( mmatches.size()*mmatches[0].size() );
+
+  for( int i = 0; i < matches.size(); i++ )
+  {
+    if( matches[i].trainIdx < 0 || matches[i].imgIdx < 0 )
+    {
+      continue;
+    }
+    int iQIndex = matches[i].queryIdx;
+    int iTIndex = matches[i].trainIdx;
+    int iIIndex = matches[i].imgIdx;
+    const KeyPoint &keyQ = queryKeypoints[iQIndex];
+    const KeyPoint &keyT = trainKeypoints[iIIndex][iTIndex];
+
+    HoughCodeSimilarity hc;
+
+    hc.m_Key_fRow = keyQ.pt.y;
+    hc.m_Key_fCol = keyQ.pt.x;
+    hc.m_Key_fOri = angle_radians(keyQ.angle);
+    hc.m_Key_fScale = keyQ.size;
+
+    KeypointGeometry kg;
+
+    hc.SetHoughCode( refy, refx, 0, 10 );
+    hc.FindPollBooth( keyT.pt.y, keyT.pt.x, angle_radians(keyT.angle), keyT.size, kg.m_Key_fRow, kg.m_Key_fCol, kg.m_Key_fOri, kg.m_Key_fScale );
+    kg.iIndex0 = i;
+    vecKG.push_back( kg );
+  }
+
+  int iMaxIndex;
+  int iMaxCount = 0;
+  for( int i = 0; i < vecKG.size(); i++ )
+  {
+    KeypointGeometry &kg1 = vecKG[i];
+    int iCount = 0;
+    for( int j = 0; j < vecKG.size(); j++ )
+    {
+      KeypointGeometry &kg2 = vecKG[j];
+      if( compatible_poll_booths_line_segment(
+        kg1.m_Key_fCol,
+        kg1.m_Key_fRow,
+        angle_radians(kg1.m_Key_fOri),
+        kg1.m_Key_fScale,
+        kg2.m_Key_fCol,
+        kg2.m_Key_fRow,
+        angle_radians(kg2.m_Key_fOri),
+        kg2.m_Key_fScale ) )
+      {
+        iCount++;
+      }
+    }
+    if( iCount > iMaxCount )
+    {
+      iMaxIndex = i;
+      iMaxCount = iCount;
+    }
+  }
+
+  for( int i = 0; i < matches.size(); i++ )
+  {
+    KeypointGeometry &kg1 = vecKG[iMaxIndex];
+    for( int j = 0; j < vecKG.size(); j++ )
+    {
+      KeypointGeometry &kg2 = vecKG[j];
+      if( compatible_poll_booths_line_segment(
+        kg1.m_Key_fCol,
+        kg1.m_Key_fRow,
+        angle_radians(kg1.m_Key_fOri),
+        kg1.m_Key_fScale,
+        kg2.m_Key_fCol,
+        kg2.m_Key_fRow,
+        angle_radians(kg2.m_Key_fOri),
+        kg2.m_Key_fScale ) )
+      {
+      }
+      else
+      {
+        matches[j].imgIdx = -1;
+        matches[j].queryIdx = -1;
+        matches[j].trainIdx = -1;
+      }
+    }
+  }
+
+  return iMaxCount;
+}
+
+//
+// houghTransform()
+//
+// Call with one vector of keypoints.
+//
+int
+  houghTransform(
+  const vector<KeyPoint>& queryKeypoints,
+  const vector<KeyPoint> & trainKeypoints,
+  vector<DMatch> & matches,
+  int refx, int refy
+  )
+{
+  vector< vector<KeyPoint> > vvtrainKeypoints;
+  vvtrainKeypoints.push_back( trainKeypoints );
+  return houghTransform( queryKeypoints, vvtrainKeypoints, matches, refx, refy );
+}
+
+//
+// houghTransform()
+//
+// Call with a double vector of matches.
+//
+int
+  houghTransform(
+  const vector<KeyPoint>& queryKeypoints,
+  const vector< vector<KeyPoint> > & trainKeypoints,
+  vector< vector<DMatch> > & matches,
+  int refx, int refy
+  )
+{
+  vector<DMatch> vvMatches;
+
+  for( int i = 0; i < matches.size(); i++ )
+  {
+    for( int j = 0; j < matches[i].size(); j++ )
+    {
+      if( matches[i][j].trainIdx >= 0 )
+        vvMatches.push_back( matches[i][j] );
+    }
+  }
+
+  return houghTransform( queryKeypoints, trainKeypoints, vvMatches, refx, refy );
 }

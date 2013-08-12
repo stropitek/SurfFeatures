@@ -217,29 +217,50 @@ int main()
   Mat mask(dim[1], dim[0], CV_8U, reslicedMask);
 
   // Compute the features on the resliced image
+  // Find Keypoints and compute descriptors
 
-  // Get the descriptor of the current image
-  cv::SurfFeatureDetector detector(400);
-  // Find Keypoints
+  // Database, the resliced image
   vector<cv::KeyPoint> keypoints;
-  detector.detect(img,keypoints,mask);
+  cv::Mat descriptor;
+  computeKeypointsAndDescriptors(img,mask,keypoints,descriptor);
+  vector<cv::Mat> descriptors;
+  descriptors.push_back(descriptor);
+  Ptr<DescriptorMatcher> descriptorMatcher = DescriptorMatcher::create("FlannBased");
+  descriptorMatcher->clear();
+  descriptorMatcher->add(descriptors);
 
+  // Query, the original image
+  Mat mniMask = cv::imread("C:\\Users\\DanK\\MProject\\data\\MNI\\mni_mask.png", CV_LOAD_IMAGE_GRAYSCALE);
+  Mat originalImg = images[0].clone();
+  vector<cv::KeyPoint> queryKeypoints;
+  cv::Mat queryDescriptors;
+  computeKeypointsAndDescriptors(originalImg, mniMask, queryKeypoints, queryDescriptors);
+
+  // Find matches
+  vector<vector<DMatch> > matches;
+  int k = 1;
+  matchDescriptorsKNN(queryDescriptors, matches, descriptorMatcher, k);
+
+  // Find matches (individual)
+  vector<DMatch> singleMatches;
+  matchDescriptors(queryDescriptors, singleMatches, descriptorMatcher );
+
+
+
+  // Draw keypoints and matches
   cv::Mat imgWithKeypoints;
   cv::drawKeypoints(img, keypoints, imgWithKeypoints);
 
-
-
-
-
-  cvStartWindowThread();
-  cv::imshow("Image", img );
+  cv::Mat matchesImg;
+  //cv::drawMatches(originalImg, queryKeypoints, img, keypoints, matches, matchesImg, Scalar::all(-1), Scalar::all(-1), vector<vector<char> >(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS | DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+  matchesImg = getResultImage(originalImg, queryKeypoints, img, keypoints, singleMatches, 0);
   
 
-  cvStartWindowThread();
-  cv::imshow("Original", images[0] );
-  cv::waitKey(0);
-  cvDestroyWindow("Original");
-  cvDestroyWindow("Image");
+  //cvStartWindowThread();
+  //cv::imshow("Matches", matchesImg );
+  //cv::waitKey(0);
+  //cvDestroyWindow("Matches");
+  //cvDestroyWindow("Matches");
 
 
 
