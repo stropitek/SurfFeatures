@@ -892,8 +892,7 @@ int
   float fPollScl,
   float fTranslationErrorThres,
   float fScaleErrorThres,
-  float fOrientationErrorThres
-  )
+  float fOrientationErrorThres)
 {
   float fLogTrainingPollScl = log( fTrainingScl );
   float fLogPollScl = log( fPollScl );

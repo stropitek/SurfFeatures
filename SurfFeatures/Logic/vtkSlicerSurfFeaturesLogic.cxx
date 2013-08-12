@@ -787,26 +787,29 @@ void vtkSlicerSurfFeaturesLogic::computeNextInterSliceCorrespondence_blabla()
 
   vector<DMatch> matches = getValidMatches(mmatches);
   vector<DMatch> matchesWithBogus = getValidMatches(mmatchesBogus);
+  vector<int> allVotes = countVotes(matches, this->trainKeypoints.size());
 
   // Filter bogus step. Match left after bogus filtering.
   vector<DMatch> bogusMatches = filterBogus(matches, matchesWithBogus, 0.95);
   vector<DMatch> houghMatches = bogusMatches;
+  vector<int> bogusVotes = countVotes(bogusMatches, this->trainKeypoints.size());
 
    // Do the hough transform which keeps a cluster of matches that agree on an in plane transform
   int iMatchCount = houghTransform( this->queryKeypoints[i], this->trainKeypoints, houghMatches, this->xcentroid, this->ycentroid );
   this->afterHoughMatches.push_back(houghMatches);
+  vector<int> houghVotes = countVotes(houghMatches, this->trainKeypoints.size());
 
   // Number of valid matches for each train image
-  vector<int> votes = countVotes(houghMatches, this->trainKeypoints.size());
-  vector<DMatch> smoothMatches = filterSmoothAndThreshold(votes, houghMatches);
+  vector<DMatch> smoothMatches = filterSmoothAndThreshold(houghVotes, houghMatches);
+  vector<int> smoothVotes = countVotes(smoothMatches, this->trainKeypoints.size());
 
   // Find train image with maximum votes
   int iMaxIndex = -1;
   int iMaxCount = -1;
-  for( int j = 0; j < votes.size(); j++ )
+  for( int j = 0; j < houghVotes.size(); j++ )
   {
       // Store the index and count of the training image with the most counts.
-    int iCount = votes[j];
+    int iCount = houghVotes[j];
     if( iCount > iMaxCount )
     {
       iMaxCount = iCount;

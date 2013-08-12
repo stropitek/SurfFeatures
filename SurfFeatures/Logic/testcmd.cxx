@@ -130,7 +130,8 @@ int main()
   double x[3] = {0.,0.,0.};
   double pcoords[3];
   int ijk[3];
-  reslicedImage->ComputeStructuredCoordinates(x,ijk,pcoords);
+  int status = reslicedImage->ComputeStructuredCoordinates(x,ijk,pcoords);
+
   vnl_matrix<double> newOrigin(3,1,0.);
   newOrigin -= cosines.extract(3,1)*ijk[0]*reslicedImage->GetSpacing()[0];
   newOrigin -= cosines.extract(3,1,0,1)*ijk[1]*reslicedImage->GetSpacing()[1];
@@ -237,15 +238,22 @@ int main()
   computeKeypointsAndDescriptors(originalImg, mniMask, queryKeypoints, queryDescriptors);
 
   // Find matches
-  vector<vector<DMatch> > matches;
+  vector<vector<DMatch> > mmatches;
   int k = 1;
-  matchDescriptorsKNN(queryDescriptors, matches, descriptorMatcher, k);
+  matchDescriptorsKNN(queryDescriptors, mmatches, descriptorMatcher, k);
+  vector<DMatch> matches = getValidMatches(mmatches);
+  vector<int> allVotes = countVotes(matches, 1);
+  cout << "Total of " << allVotes[0] << " correspondences found." << endl;
 
-  // Find matches (individual)
-  vector<DMatch> singleMatches;
-  matchDescriptors(queryDescriptors, singleMatches, descriptorMatcher );
+  // Skip bogus filter
 
-
+  // Hough filter
+  vector<DMatch> houghMatches = matches;
+  int xc,yc;
+  computeCentroid(mniMask,xc,yc);
+  int iMatchCount = houghTransform( queryKeypoints, keypoints, houghMatches, xc, yc );
+  vector<int> houghVotes = countVotes(houghMatches, 1);
+  cout << houghVotes[0] << " correspondences found after hough transform." << endl;
 
   // Draw keypoints and matches
   cv::Mat imgWithKeypoints;
@@ -253,14 +261,14 @@ int main()
 
   cv::Mat matchesImg;
   //cv::drawMatches(originalImg, queryKeypoints, img, keypoints, matches, matchesImg, Scalar::all(-1), Scalar::all(-1), vector<vector<char> >(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS | DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-  matchesImg = getResultImage(originalImg, queryKeypoints, img, keypoints, singleMatches, 0);
+  matchesImg = getResultImage(originalImg, queryKeypoints, img, keypoints, houghMatches, 0);
   
 
-  //cvStartWindowThread();
-  //cv::imshow("Matches", matchesImg );
-  //cv::waitKey(0);
-  //cvDestroyWindow("Matches");
-  //cvDestroyWindow("Matches");
+  cvStartWindowThread();
+  cv::imshow("Matches", matchesImg );
+  cv::waitKey(0);
+  cvDestroyWindow("Matches");
+  cvDestroyWindow("Matches");
 
 
 
