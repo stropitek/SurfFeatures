@@ -13,7 +13,13 @@ set(${KIT}_SRCS
   vtkSlicer${MODULE_NAME}Logic.h
   )
   
-add_library(customUtils STATIC mhaReader.cxx mhaReader.h)
+set(UTILS_SRC
+  mhaReader.cxx mhaReader.h
+  matlabWriter.cxx matlabWriter.h
+  houghTransform.cxx houghTransform.h
+  )
+  
+add_library(customUtils STATIC ${UTILS_SRC})
 target_link_libraries(customUtils ${OpenCV_LIBS})
 
 set(${KIT}_TARGET_LIBRARIES
@@ -32,14 +38,17 @@ SlicerMacroBuildModuleLogic(
   SRCS ${${KIT}_SRCS}
   TARGET_LIBRARIES ${${KIT}_TARGET_LIBRARIES} customUtils
 )
-  
+
+add_library(customUtilsPlus STATIC ${UTILS_SRC} surfUtil.cxx surfUtil.h)
+target_link_libraries(customUtilsPlus ${OpenCV_LIBS} ${KIT})
+
 get_cmake_property(_variableNames VARIABLES)
 foreach (_variableName ${_variableNames})
   message(STATUS "${_variableName}=${${_variableName}}")
 endforeach()
 
-add_executable(surfcmd surfcmd.cxx logicUtility.hpp surfLogicUtility.hpp)
-target_link_libraries(surfcmd ${KIT} customUtils)
+add_executable(surfcmd surfcmd.cxx)
+target_link_libraries(surfcmd customUtilsPlus)
 
-add_executable(testcmd testcmd.cxx surfLogicUtility.hpp)
-target_link_libraries(testcmd ${KIT} customUtils)
+add_executable(testcmd testcmd.cxx)
+target_link_libraries(testcmd customUtilsPlus)

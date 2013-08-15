@@ -34,6 +34,9 @@
 // vnl includes
 #include <vnl/vnl_double_3.h>
 
+// Slicer logic
+#include "vtkSlicerSurfFeaturesLogic.h"
+
 using namespace std;
 using namespace cv;
 
@@ -109,8 +112,9 @@ vector<int> countVotes(const vector<DMatch>& matches, int trainSize);
 vector<DMatch> getValidMatches(const vector<vector<DMatch> >& matches);
 vector<DMatch> filterValidMatches(const vector<DMatch>& matches);
 vector<DMatch> filterSmoothAndThreshold(const vector<int>& votes, const vector<DMatch> matches);
-vector<DMatch> filterBogus(const vector<DMatch>& matches, const vector<DMatch>& bmatches, int threshold);
+vector<DMatch> filterBogus(const vector<DMatch>& matches, const vector<DMatch>& bmatches, float threshold);
 void computeCentroid(const cv::Mat& mask, int& x, int& y);
+cv::Mat rotateImage(const Mat& source, double angle);
 
 // =======================================================
 // Helpers - geometry functions
@@ -137,51 +141,11 @@ vtkImageData* cropData(vtkImageData* data, float cropRatios[4]);
 void cropData(cv::Mat& img, float cropRatios[4]);
 cv::Mat convertImage(vtkImageData* image);
 
-// ===========================================
-// Hough Transform
-// ===========================================
 
-#define SCALE_DIFF log((float)1.5f)
-#define ORIENTATION_DIFF (20.0f*PI/180.0F)
-#define TRANSLATION_ERROR (30.0f/43.0f)
-#define PI 3.141592653589793
-
-float angle_radians(float fAngle );
-
-int compatible_poll_booths_line_segment(
-  float fTrainingCol,
-  float fTrainingRow,
-  float fTrainingOri,
-  float fTrainingScl,
-  float fPollCol,
-  float fPollRow,
-  float fPollOri,
-  float fPollScl,
-  float fTranslationErrorThres = TRANSLATION_ERROR,
-  float fScaleErrorThres = SCALE_DIFF,
-  float fOrientationErrorThres = ORIENTATION_DIFF);
-
-
-int houghTransform(
-  const vector<KeyPoint>& queryKeypoints,
-  const vector< vector<KeyPoint> > & trainKeypoints,
-  vector<DMatch> & matches,
-  int refx, int refy);
-
-
-
-int houghTransform(
-  const vector<KeyPoint>& queryKeypoints,
-  const vector<KeyPoint> & trainKeypoints,
-  vector<DMatch> & matches,
-  int refx, int refy);
-
-int houghTransform(
-  const vector<KeyPoint>& queryKeypoints,
-  const vector< vector<KeyPoint> > & trainKeypoints,
-  vector< vector<DMatch> > & matches,
-  int refx, int refy);
-
+void readLines( const string& filename, vector<string>& lines );
+void readTab(const string& filename, vector<vector<string> >& tab);
+void normalizeDir(std::string& dir);
+void splitDir(const std::string& filename, std::string& dir, std::string& file, string& ext);
 
 
 #endif

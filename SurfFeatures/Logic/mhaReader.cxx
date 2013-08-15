@@ -462,8 +462,7 @@ cv::Mat getResultImage( const Mat& queryImage, const vector<KeyPoint>& queryKeyp
 
 vector<int> countVotes(const vector<DMatch>& matches, int trainSize)
 {
-  vector<int> votes;
-  votes.resize(trainSize);
+  vector<int> votes(trainSize, 0);
   for(int i=0; i<matches.size(); i++)
   {
     if (matches[i].imgIdx != -1)
@@ -494,7 +493,7 @@ vector<DMatch> filterValidMatches(const vector<DMatch>& matches)
   return validMatches;
 }
 
-vector<DMatch> filterBogus(const vector<DMatch>& matches, const vector<DMatch>& bmatches, int threshold)
+vector<DMatch> filterBogus(const vector<DMatch>& matches, const vector<DMatch>& bmatches, float threshold)
 {
   vector<DMatch> filtered;
   // Disable best matches if they also have a good match with bogus data
@@ -593,6 +592,15 @@ void computeCentroid(const cv::Mat& mask, int& x, int& y)
   colcentroid /= count;
   y = (int)rowcentroid;
   x = (int)colcentroid;
+}
+
+cv::Mat rotateImage(const Mat& source, double angle)
+{
+    Point2f src_center(source.cols/2.0F, source.rows/2.0F);
+    Mat rot_mat = getRotationMatrix2D(src_center, angle, 1.0);
+    Mat dst;
+    warpAffine(source, dst, rot_mat, source.size());
+    return dst;
 }
 
 // =======================================================
@@ -746,331 +754,69 @@ cv::Mat convertImage(vtkImageData* image)
   return ocvImage.clone();
 }
 
-// ===========================================
-// Hough Transform
-// ===========================================
 
-class HoughCodeSimilarity
+void readTab(const string& filename, vector<vector<string> >& tab)
 {
-public:
-
-  HoughCodeSimilarity(
-    )
+  tab.clear();
+  ifstream file(filename.c_str());
+  if(!file.is_open())
+    return;
+  vector<string> lines;
+  while(!file.eof())
   {
-    m_fAngleToBooth = -1;
-    m_fDistanceToBooth = -1;
-    m_fAngleDiff = -1;
-    m_fScaleDiff = -1;
+    string str; getline(file,str);
   }
 
-  ~HoughCodeSimilarity(
-    )
+  for(int i=0; i<lines.size(); i++)
   {
-  }
-
-
-  int
-    SetHoughCode(
-    const float &fPollRow,	// Poll booth row
-    const float &fPollCol,	// Poll booth col
-    const float &fPollOri,	// Poll booth orientation
-    const float &fPollScl	// Poll booth scale
-    )
-  {
-    // Set distance to poll booth
-    float fDiffRow = fPollRow - m_Key_fRow;
-    float fDiffCol = fPollCol - m_Key_fCol;
-    float fDistSqr = fDiffCol*fDiffCol + fDiffRow*fDiffRow;
-    m_fDistanceToBooth = (float)sqrt( fDistSqr );
-
-    // Set angle between feature orientation and poll booth
-    float fAngleToBooth = (float)atan2( fDiffRow, fDiffCol );
-    m_fAngleToBooth = fAngleToBooth;
-
-    // Set angular and orientation differences
-    m_fAngleDiff = fPollOri - m_Key_fOri;
-    m_fScaleDiff = fPollScl / m_Key_fScale;
-
-    return 0;
-  }
-
-  int
-    FindPollBooth(
-    const float &fRow,
-    const float &fCol,
-    const float &fOri,
-    const float &fScale,
-    float &fPollRow,		// Return row value
-    float &fPollCol,		// Return col value,
-    float &fPollOri,		// Return orientation value
-    float &fPollScl,		// Return scale value
-    int   bMirror	= 0// Match is a mirror of this feature
-    ) const
-  {
-    if( !bMirror )
+    istringstream iss(lines[i]);
+    vector<string> words;
+    while(!iss.eof())
     {
-      float fOriDiff = fOri - m_Key_fOri;
-      float fScaleDiff = fScale / m_Key_fScale;
-
-      float fDist = m_fDistanceToBooth*fScaleDiff;
-      float fAngle = m_fAngleToBooth + fOriDiff;
-
-      fPollRow = (float)(sin( fAngle )*fDist + fRow);
-      fPollCol = (float)(cos( fAngle )*fDist + fCol);
-
-      fPollOri = fOri + m_fAngleDiff;
-      fPollScl = m_fScaleDiff*fScale;
+      string word;
+      iss >> word;
+      if(!word.empty())
+        words.push_back(word);
     }
-    else
-    {
-      // Here, we consider a mirrored poll both
-      float fOriDiff = fOri - (-m_Key_fOri);
-      float fScaleDiff = fScale / m_Key_fScale;
-
-      float fDist = m_fDistanceToBooth*fScaleDiff;
-      float fAngle = (-m_fAngleToBooth) + fOriDiff;
-
-      fPollRow = (float)(sin( fAngle )*fDist + fRow);
-      fPollCol = (float)(cos( fAngle )*fDist + fCol);
-
-      fPollOri = fOri - m_fAngleDiff;
-      fPollScl = m_fScaleDiff*fScale;
-    }
-
-    return 0;
-  }
-
-
-
-  float m_fAngleToBooth;	// With just this, we can draw a line through to the booth
-  float m_fDistanceToBooth;	// With just this, we can draw a circle through booth
-
-  float m_fAngleDiff;		// Poll booth angle - key angle
-  float m_fScaleDiff;		// Poll booth scale / key scale
-
-  float m_Key_fRow;
-  float m_Key_fCol;
-  float m_Key_fOri;
-  float m_Key_fScale;
-
-};
-
-class KeypointGeometry
-{
-public:
-  KeypointGeometry(){};
-  ~KeypointGeometry(){};
-
-  int iIndex0;
-  int iIndex1;
-
-  float m_Key_fRow;
-  float m_Key_fCol;
-  float m_Key_fOri;
-  float m_Key_fScale;	
-};
-
-
-
-
-float angle_radians(float fAngle )
-{
-  return (2.0f*PI*fAngle) / 180.0f;
-}
-
-
-
-int
-  compatible_poll_booths_line_segment(
-  float fTrainingCol,
-  float fTrainingRow,
-  float fTrainingOri,
-  float fTrainingScl,
-  float fPollCol,
-  float fPollRow,
-  float fPollOri,
-  float fPollScl,
-  float fTranslationErrorThres,
-  float fScaleErrorThres,
-  float fOrientationErrorThres)
-{
-  float fLogTrainingPollScl = log( fTrainingScl );
-  float fLogPollScl = log( fPollScl );
-  float fLogSclDiff = fabs( fLogTrainingPollScl - fLogPollScl );
-
-  float fDiffCol = fPollCol - fTrainingCol;
-  float fDiffRow = fPollRow - fTrainingRow;
-  float fDistDiff = sqrt( fDiffCol*fDiffCol + fDiffRow*fDiffRow );
-
-  float fOriDiff = fPollOri > fTrainingOri ?
-    fPollOri - fTrainingOri : fTrainingOri - fPollOri;
-  assert( fOriDiff >= 0 && fOriDiff < 2*PI );
-  if( fOriDiff > (2*PI - fOriDiff) )
-  {
-    fOriDiff = (2*PI - fOriDiff);
-  }
-  assert( fOriDiff >= 0 && fOriDiff < 2*PI );
-
-  // If the best match and this feature are within the match
-  // hypothesis
-
-  //if(		fDistDiff	< TRANSLATION_ERROR*fTrainingScl
-  //	&&	fLogSclDiff	< SCALE_DIFF
-  //	&&	fOriDiff	< ORIENTATION_DIFF
-  //	)
-  if(		fDistDiff	< fTranslationErrorThres*fTrainingScl
-    &&	fLogSclDiff	< fScaleErrorThres
-    &&	fOriDiff	< fOrientationErrorThres
-    )
-  {
-    return 1;
-  }
-  else
-  {
-    return 0;
+    tab.push_back(words);
   }
 }
 
-int
-  houghTransform(
-  const vector<KeyPoint>& queryKeypoints,
-  const vector< vector<KeyPoint> > & trainKeypoints,
-  vector<DMatch> & matches,
-  int refx, int refy
-  )
+// Normalize dir by adding the appropriate delimiter at the end, if not present
+void normalizeDir(std::string& dir)
 {
-  float fRefX;
-  float fRefY;
+  #ifdef WIN32
+  const char dlmtr = '\\';
+  #else
+  const char dlmtr = '/';
+  #endif
 
-  vector< KeypointGeometry > vecKG;
-  //vecKG.resize( mmatches.size()*mmatches[0].size() );
-
-  for( int i = 0; i < matches.size(); i++ )
-  {
-    if( matches[i].trainIdx < 0 || matches[i].imgIdx < 0 )
-    {
-      continue;
-    }
-    int iQIndex = matches[i].queryIdx;
-    int iTIndex = matches[i].trainIdx;
-    int iIIndex = matches[i].imgIdx;
-    const KeyPoint &keyQ = queryKeypoints[iQIndex];
-    const KeyPoint &keyT = trainKeypoints[iIIndex][iTIndex];
-
-    HoughCodeSimilarity hc;
-
-    hc.m_Key_fRow = keyQ.pt.y;
-    hc.m_Key_fCol = keyQ.pt.x;
-    hc.m_Key_fOri = angle_radians(keyQ.angle);
-    hc.m_Key_fScale = keyQ.size;
-
-    KeypointGeometry kg;
-
-    hc.SetHoughCode( refy, refx, 0, 10 );
-    hc.FindPollBooth( keyT.pt.y, keyT.pt.x, angle_radians(keyT.angle), keyT.size, kg.m_Key_fRow, kg.m_Key_fCol, kg.m_Key_fOri, kg.m_Key_fScale );
-    kg.iIndex0 = i;
-    vecKG.push_back( kg );
+  if(!dir.empty()){
+    if(*(dir.end()-1) != dlmtr)
+      dir = dir + dlmtr;
   }
 
-  int iMaxIndex;
-  int iMaxCount = 0;
-  for( int i = 0; i < vecKG.size(); i++ )
-  {
-    KeypointGeometry &kg1 = vecKG[i];
-    int iCount = 0;
-    for( int j = 0; j < vecKG.size(); j++ )
-    {
-      KeypointGeometry &kg2 = vecKG[j];
-      if( compatible_poll_booths_line_segment(
-        kg1.m_Key_fCol,
-        kg1.m_Key_fRow,
-        angle_radians(kg1.m_Key_fOri),
-        kg1.m_Key_fScale,
-        kg2.m_Key_fCol,
-        kg2.m_Key_fRow,
-        angle_radians(kg2.m_Key_fOri),
-        kg2.m_Key_fScale ) )
-      {
-        iCount++;
-      }
-    }
-    if( iCount > iMaxCount )
-    {
-      iMaxIndex = i;
-      iMaxCount = iCount;
-    }
-  }
-
-  for( int i = 0; i < matches.size(); i++ )
-  {
-    KeypointGeometry &kg1 = vecKG[iMaxIndex];
-    for( int j = 0; j < vecKG.size(); j++ )
-    {
-      KeypointGeometry &kg2 = vecKG[j];
-      if( compatible_poll_booths_line_segment(
-        kg1.m_Key_fCol,
-        kg1.m_Key_fRow,
-        angle_radians(kg1.m_Key_fOri),
-        kg1.m_Key_fScale,
-        kg2.m_Key_fCol,
-        kg2.m_Key_fRow,
-        angle_radians(kg2.m_Key_fOri),
-        kg2.m_Key_fScale ) )
-      {
-      }
-      else
-      {
-        matches[j].imgIdx = -1;
-        matches[j].queryIdx = -1;
-        matches[j].trainIdx = -1;
-      }
-    }
-  }
-
-  return iMaxCount;
 }
 
-//
-// houghTransform()
-//
-// Call with one vector of keypoints.
-//
-int
-  houghTransform(
-  const vector<KeyPoint>& queryKeypoints,
-  const vector<KeyPoint> & trainKeypoints,
-  vector<DMatch> & matches,
-  int refx, int refy
-  )
+// Get the directory given a filename.
+void splitDir(const std::string& filename, std::string& dir, std::string& file, string& ext)
 {
-  vector< vector<KeyPoint> > vvtrainKeypoints;
-  vvtrainKeypoints.push_back( trainKeypoints );
-  return houghTransform( queryKeypoints, vvtrainKeypoints, matches, refx, refy );
-}
+  #ifdef WIN32
+  const char dlmtr = '\\';
+  #else
+  const char dlmtr = '/';
+  #endif
 
-//
-// houghTransform()
-//
-// Call with a double vector of matches.
-//
-int
-  houghTransform(
-  const vector<KeyPoint>& queryKeypoints,
-  const vector< vector<KeyPoint> > & trainKeypoints,
-  vector< vector<DMatch> > & matches,
-  int refx, int refy
-  )
-{
-  vector<DMatch> vvMatches;
+  size_t pos = filename.rfind(dlmtr);
+  dir = pos == string::npos ? "" : filename.substr(0, pos) + dlmtr;
+  file = pos == string::npos ? "" : filename.substr(pos+1);
 
-  for( int i = 0; i < matches.size(); i++ )
-  {
-    for( int j = 0; j < matches[i].size(); j++ )
-    {
-      if( matches[i][j].trainIdx >= 0 )
-        vvMatches.push_back( matches[i][j] );
-    }
+  if(file.empty()){
+    ext=""; return;
   }
 
-  return houghTransform( queryKeypoints, trainKeypoints, vvMatches, refx, refy );
+  pos = file.find_last_of(".");
+  ext = pos == string::npos ? "" : file.substr(pos+1);
+  file = pos == string::npos ? file : file.substr(0,pos);
+
 }

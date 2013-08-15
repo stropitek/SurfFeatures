@@ -17,8 +17,8 @@ limitations under the License.
 
 // SurfFeatures Logic includes
 #include "vtkSlicerSurfFeaturesLogic.h"
-#include "logicUtility.hpp"
-#include "surfLogicUtility.hpp"
+#include "houghTransform.h"
+#include "matlabWriter.h"
 
 // MRML includes 
 
@@ -614,7 +614,11 @@ void vtkSlicerSurfFeaturesLogic::startInterSliceCorrespondence()
   this->bestMatches.clear();
   this->bestMatchesCount.clear();
   this->matchesWithBestTrainImage.clear();
+  this->allMatches.clear();
+  this->afterBogusMatches.clear();
   this->afterHoughMatches.clear();
+  this->afterSmoothMatches.clear();
+  this->afterRansacMatches.clear();
   this->correspondenceProgress = 0;
   this->Modified();
 }
@@ -786,23 +790,30 @@ void vtkSlicerSurfFeaturesLogic::computeNextInterSliceCorrespondence_blabla()
 
 
   vector<DMatch> matches = getValidMatches(mmatches);
+  this->allMatches.push_back(matches);
+
   vector<DMatch> matchesWithBogus = getValidMatches(mmatchesBogus);
   vector<int> allVotes = countVotes(matches, this->trainKeypoints.size());
 
   // Filter bogus step. Match left after bogus filtering.
   vector<DMatch> bogusMatches = filterBogus(matches, matchesWithBogus, 0.95);
+  this->afterBogusMatches.push_back(bogusMatches);
   vector<DMatch> houghMatches = bogusMatches;
   vector<int> bogusVotes = countVotes(bogusMatches, this->trainKeypoints.size());
 
    // Do the hough transform which keeps a cluster of matches that agree on an in plane transform
   int iMatchCount = houghTransform( this->queryKeypoints[i], this->trainKeypoints, houghMatches, this->xcentroid, this->ycentroid );
+  houghMatches = filterValidMatches(houghMatches);
   this->afterHoughMatches.push_back(houghMatches);
   vector<int> houghVotes = countVotes(houghMatches, this->trainKeypoints.size());
 
-  // Number of valid matches for each train image
+  // Smoothing, discard matches that stand alone
   vector<DMatch> smoothMatches = filterSmoothAndThreshold(houghVotes, houghMatches);
+  smoothMatches = filterValidMatches(smoothMatches);
+  this->afterSmoothMatches.push_back(smoothMatches);
   vector<int> smoothVotes = countVotes(smoothMatches, this->trainKeypoints.size());
 
+  // Number of valid matches for each train image
   // Find train image with maximum votes
   int iMaxIndex = -1;
   int iMaxCount = -1;
@@ -917,7 +928,7 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNode()
   }
 }
 
-void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
+void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac(const vector<vector<DMatch> >& matches)
 {
   if(this->correspondenceProgress != 100)
     return;
@@ -938,13 +949,13 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   std::vector<vnl_double_3> trainPoints;
   // Query points in the u,v image coordinates
   std::vector<vnl_double_3> queryPoints;
-  for(int j=0; j<this->afterHoughMatches[this->currentImgIndex].size(); j++)
+  for(int j=0; j<matches[this->currentImgIndex].size(); j++)
   {
-    int imgIdx = this->afterHoughMatches[this->currentImgIndex][j].imgIdx;
+    int imgIdx = matches[this->currentImgIndex][j].imgIdx;
     if(imgIdx == -1)
       continue;
-    int tIdx = this->afterHoughMatches[this->currentImgIndex][j].trainIdx;
-    int qIdx = this->afterHoughMatches[this->currentImgIndex][j].queryIdx;
+    int tIdx = matches[this->currentImgIndex][j].trainIdx;
+    int qIdx = matches[this->currentImgIndex][j].queryIdx;
     
     // Compute transform matrix for the image of this training keypoint
     vtkSmartPointer<vtkMatrix4x4> transform = vtkSmartPointer<vtkMatrix4x4>::New();
@@ -974,8 +985,17 @@ void vtkSlicerSurfFeaturesLogic::updateMatchNodeRansac()
   if(planePointsIdx.empty())
   {
     this->log("Not enough matches to construct plane\n");
+    this->afterRansacMatches.push_back(vector<DMatch>());
     return;
   }
+
+  // Memorize ransac matches
+  vector<DMatch> ransacMatches;
+  for(int n_inliers=0; n_inliers<inliersIdx.size(); n_inliers++)
+  {
+    ransacMatches.push_back(matches[this->currentImgIndex][n_inliers]);
+  }
+  this->afterRansacMatches.push_back(ransacMatches);
   // Compute normal plane based on three selected points by ransac
   vnl_double_3 plane;
   double d;
@@ -1378,7 +1398,7 @@ void vtkSlicerSurfFeaturesLogic::updateImage()
   //this->drawBestTrainMatches();
   this->updateQueryNode();
   //this->updateMatchNode();
-  this->updateMatchNodeRansac();
+  this->updateMatchNodeRansac(this->afterSmoothMatches);
 }
 
 
@@ -1443,7 +1463,7 @@ void vtkSlicerSurfFeaturesLogic::simulateAll()
   for(int i=0; i<queryImages.size(); i++)
   {
     this->currentImgIndex = i;
-    this->updateMatchNodeRansac();
+    this->updateMatchNodeRansac(this->afterSmoothMatches);
   }
 }
 

@@ -1,19 +1,24 @@
 #include "vtkSlicerSurfFeaturesLogic.h"
-#include "logicUtility.hpp"
-#include "surfLogicUtility.hpp"
+#include "mhaReader.h"
+#include "surfUtil.h"
+#include "matlabWriter.h"
 
 #define MATLAB_LOG_RESULTS std::ostringstream oss;\
-    oss << "x{" << l << "}";\
+    oss << "x{" << l+1 << "}";\
     writeVarForMatlab(ofs, oss.str()+".bogusFile", bogusFile);\
     writeVarForMatlab(ofs, oss.str()+".trainFile", trainFile);\
     writeVarForMatlab(ofs, oss.str()+".queryFile", queryFile);\
     writeVarForMatlab(ofs, oss.str()+".ransacMargin", ransacMargin);\
     writeVarForMatlab(ofs, oss.str()+".minHessian", minHessian);\
-    writeVarForMatlab(ofs, oss.str()+".repetition", l);\
+    writeVarForMatlab(ofs, oss.str()+".repetition", l+1);\
     writeVarForMatlab(ofs, oss.str()+".iInliers", surf->getIInliers());\
     writeVarForMatlab(ofs, oss.str()+".iOutliers", surf->getIOutliers());\
     writeVarForMatlab(ofs, oss.str()+".matchDistance", surf->getMatchDistances());\
-    writeVarForMatlab(ofs, oss.str()+".planeDistance", surf->getPlaneDistances());
+    writeVarForMatlab(ofs, oss.str()+".planeDistance", surf->getPlaneDistances());\
+    writeVarForMatlab(ofs, oss.str()+".allMatches", surf->getAllMatches());\
+    writeVarForMatlab(ofs, oss.str()+".afterBogusMatches", surf->getAfterBogusMatches());\
+    writeVarForMatlab(ofs, oss.str()+".afterHoughMatches", surf->getAfterHoughMatches());\
+    writeVarForMatlab(ofs, oss.str()+".afterSmoothMatches", surf->getAfterSmoothMatches());
 
 
 
@@ -58,7 +63,7 @@ void planeFittingFromFiles(string bogusFile, string trainFile, string queryFile,
 }
 
 void planeFittingFromSavedKeypoints(string bogusFile, string trainFile, string queryFile, string outputFile,\
-                                    float ransacMargin = 1.5, int repetitions = 20)
+                                    float ransacMargin = 1.5, int repetitions = 1)
 {
   ofstream ofs(outputFile.c_str());
   if(!ofs.is_open()){
@@ -80,8 +85,6 @@ void planeFittingFromSavedKeypoints(string bogusFile, string trainFile, string q
   // Compute correspondences
   computeCorrespondences(surf);
 
-  
-
   for(int l=0; l<repetitions; l++) {
     surf->simulateAll();
     MATLAB_LOG_RESULTS
@@ -101,15 +104,15 @@ int main (int argc, char const *argv[])
 
   #ifdef WIN32
   //bogusFiles.push_back("C:\\Users\\DanK\\MProject\\data\\US\\Plus_test\\TrackedImageSequence_20121210_162606.mha");
-  bogusFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\group1\\01\\pre\\sweep_1a\\sweep_1a.mha");
-  //bogusFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\save\\sweep_1a");
+  //bogusFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\group1\\01\\pre\\sweep_1a\\sweep_1a.mha");
+  bogusFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\save\\sweep_1a");
   //trainFiles.push_back("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha");
-  trainFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\group1\\06\\pre\\sweep_6c\\sweep_6c.mha");
-  //trainFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\save\\sweep_6c");
+  //trainFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\group1\\06\\pre\\sweep_6c\\sweep_6c.mha");
+  trainFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\save\\sweep_6c");
   //queryFiles.push_back("C:\\Users\\DanK\\MProject\\data\\US\\decemberUS\\TrackedImageSequence_20121211_095535.mha";)
-  queryFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\group1\\06\\pre\\sweep_6d\\sweep_6d.mha");
-  //queryFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\save\\sweep_6d");
-  outputFiles.push_back("C:\\Users\\DanK\\MProject\\data\\Results\\preop_6c_6d_2.txt");
+  //queryFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\group1\\06\\pre\\sweep_6d\\sweep_6d.mha");
+  queryFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\save\\sweep_6d");
+  outputFiles.push_back("C:\\Users\\DanK\\MProject\\data\\Results\\preop_6c_6d_4.txt");
 
   #else
   bogusFiles.push_back("/Users/dkostro/Projects/MProject/data/US/Plus_test/TrackedImageSequence_20121210_162606.mha");
@@ -120,7 +123,7 @@ int main (int argc, char const *argv[])
  
   for(int i=0; i<bogusFiles.size(); i++)
   {
-    planeFittingFromFiles(bogusFiles[i], trainFiles[i], queryFiles[i], outputFiles[i]);
+    planeFittingFromSavedKeypoints(bogusFiles[i], trainFiles[i], queryFiles[i], outputFiles[i]);
     //planeFittingFromSavedKeypoints(bogusFiles[i], trainFiles[i], queryFiles[i], outputFiles[i]);
   }
   

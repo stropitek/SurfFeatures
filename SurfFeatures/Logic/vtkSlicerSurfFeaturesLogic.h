@@ -123,7 +123,7 @@ public:
   void nextImage();
   void updateQueryNode();
   void updateMatchNode();
-  void updateMatchNodeRansac();
+  void updateMatchNodeRansac(const vector<vector<DMatch> >&);
   void showCropFirstImage();
   void saveCurrentImage(string filepath);
 
@@ -288,8 +288,11 @@ private:
   // [# query images]*[# kept matches]
   std::vector<std::vector<DMatch> > matchesWithBestTrainImage;
   // [# query images] * [# kept matches]
+  std::vector<std::vector<DMatch> > allMatches;
+  std::vector<std::vector<DMatch> > afterBogusMatches;
   std::vector<std::vector<DMatch> > afterHoughMatches;
-  
+  std::vector<std::vector<DMatch> > afterSmoothMatches;
+  std::vector<std::vector<DMatch> > afterRansacMatches;
 
   // Console
   QTextEdit* console;
@@ -385,6 +388,11 @@ public:
   // Get opencv stuff
   GET(std::vector<std::vector<cv::KeyPoint> >, queryKeypoints, QueryKeypoints);
   GET(std::vector<cv::Mat>,queryDescriptors, QueryDescriptors);
+
+  GET(vector<vector<DMatch> >, allMatches, AllMatches);
+  GET(vector<vector<DMatch> >, afterBogusMatches, AfterBogusMatches);
+  GET(vector<vector<DMatch> >, afterHoughMatches, AfterHoughMatches);
+  GET(vector<vector<DMatch> >, afterSmoothMatches, AfterSmoothMatches);
 };
 
 
