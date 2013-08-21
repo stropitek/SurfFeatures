@@ -159,6 +159,7 @@ public:
   void simulateAll();
   void loadKeypointsAndDescriptors(std::string directory,std::string who);
   void saveKeypointsAndDescriptors(std::string directory, std::string who);
+  void loadSeveralTrainKeypointsAndDescriptors(vector<string> directory);
 
   // Private helpers
 private:
@@ -341,7 +342,11 @@ public:
   int getMinHessian();
   void setImageToProbeTransform(vtkMatrix4x4* matrix);
 
-  // parameter setters and getters
+  // Setters and getters
+  int getTrainSize();
+  int getBogusSize();
+  int getQuerySize();
+
   GET(QTextEdit*,console,Console);
   void setConsole(QTextEdit* console);
 
@@ -386,6 +391,10 @@ public:
   GET(std::vector<double>, planeDistances, PlaneDistances);
 
   // Get opencv stuff
+  vector<cv::KeyPoint> getQueryKeypoints(int idx);
+  vector<cv::KeyPoint> getTrainKeypoints(int idx);
+  Mat getQueryImage(int idx);
+  Mat getTrainImage(int idx);
   GET(std::vector<std::vector<cv::KeyPoint> >, queryKeypoints, QueryKeypoints);
   GET(std::vector<cv::Mat>,queryDescriptors, QueryDescriptors);
 

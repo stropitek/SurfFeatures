@@ -198,6 +198,7 @@ int
   float fRefX;
   float fRefY;
 
+  // Determine the transform for keypoint correspondences
   vector< KeypointGeometry > vecKG;
   //vecKG.resize( mmatches.size()*mmatches[0].size() );
 
@@ -222,14 +223,16 @@ int
 
     KeypointGeometry kg;
 
-    hc.SetHoughCode( refy, refx, 0, 10 );
+    hc.SetHoughCode( (float)refy, (float)refx, 0, 10 );
     hc.FindPollBooth( keyT.pt.y, keyT.pt.x, angle_radians(keyT.angle), keyT.size, kg.m_Key_fRow, kg.m_Key_fCol, kg.m_Key_fOri, kg.m_Key_fScale );
     kg.iIndex0 = i;
     vecKG.push_back( kg );
   }
 
+  // Find the transform that has most votes
   int iMaxIndex;
   int iMaxCount = 0;
+  int equals = 0;
   for( int i = 0; i < vecKG.size(); i++ )
   {
     KeypointGeometry &kg1 = vecKG[i];
@@ -254,9 +257,13 @@ int
     {
       iMaxIndex = i;
       iMaxCount = iCount;
+      equals = 0;
     }
+    else if( iCount == iMaxCount)
+      equals++;
   }
 
+  // Disable matches that don't agree on the chosen transform
   for( int i = 0; i < matches.size(); i++ )
   {
     KeypointGeometry &kg1 = vecKG[iMaxIndex];
@@ -283,6 +290,8 @@ int
     }
   }
 
+  if(equals != 0)
+    cout << "Hough Transform found " << equals+1 << " equivalent solutions." << endl;
   return iMaxCount;
 }
 

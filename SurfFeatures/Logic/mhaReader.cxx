@@ -442,7 +442,6 @@ cv::Mat getResultImage( const Mat& queryImage, const vector<KeyPoint>& queryKeyp
                      const Mat& trainImage, const vector<KeyPoint>& trainKeypoints,\
                      const vector<DMatch>& matches,int iTrainImageIndex)
 {
-    cout << "< Save results..." << endl;
     Mat drawImg;
     vector<char> mask;
     mask.resize( matches.size() );
@@ -460,6 +459,18 @@ cv::Mat getResultImage( const Mat& queryImage, const vector<KeyPoint>& queryKeyp
   return drawImg;
 }
 
+int getMaskSize(const cv::Mat& mask)
+{
+  int size = 0;
+  for(int i=0; i<mask.rows; i++){
+    for(int j=0; j<mask.cols; j++){
+      if(mask.at<unsigned char>(i,j) > 0)
+        size++;
+    }
+  }
+  return size;
+}
+
 vector<int> countVotes(const vector<DMatch>& matches, int trainSize)
 {
   vector<int> votes(trainSize, 0);
@@ -469,6 +480,18 @@ vector<int> countVotes(const vector<DMatch>& matches, int trainSize)
       votes[matches[i].imgIdx]++;
   }
   return votes;
+}
+
+void printVotes(const vector<int>& votes)
+{
+  int totalVotes = 0;
+  for(int i=0; i<votes.size(); i++)
+  {
+    if(votes[i]>0)
+      cout << "Train image #" << i << ": " << votes[i] << " correspondences" << endl;
+    totalVotes += votes[i];
+  }
+  cout << "Total number of correspondences: " << totalVotes << endl;
 }
 
 vector<DMatch> getValidMatches(const vector<vector<DMatch> >& matches)
@@ -592,6 +615,8 @@ void computeCentroid(const cv::Mat& mask, int& x, int& y)
   colcentroid /= count;
   y = (int)rowcentroid;
   x = (int)colcentroid;
+
+  cout << "Size of mask: " << getMaskSize(mask) << endl;
 }
 
 cv::Mat rotateImage(const Mat& source, double angle)
@@ -765,6 +790,8 @@ void readTab(const string& filename, vector<vector<string> >& tab)
   while(!file.eof())
   {
     string str; getline(file,str);
+    if(!str.empty())
+      lines.push_back(str);
   }
 
   for(int i=0; i<lines.size(); i++)

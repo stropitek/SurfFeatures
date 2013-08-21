@@ -108,7 +108,9 @@ cv::Mat getResultImage( const Mat& queryImage, const vector<KeyPoint>& queryKeyp
                      const Mat& trainImage, const vector<KeyPoint>& trainKeypoints,\
                      const vector<DMatch>& matches,int iTrainImageIndex);
 
+int getMaskSize(const cv::Mat& mask);
 vector<int> countVotes(const vector<DMatch>& matches, int trainSize);
+void printVotes(const vector<int>& votes);
 vector<DMatch> getValidMatches(const vector<vector<DMatch> >& matches);
 vector<DMatch> filterValidMatches(const vector<DMatch>& matches);
 vector<DMatch> filterSmoothAndThreshold(const vector<int>& votes, const vector<DMatch> matches);

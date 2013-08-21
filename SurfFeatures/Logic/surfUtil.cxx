@@ -1,4 +1,5 @@
 #include "surfUtil.h"
+#include "time.h"
 
 // ======================================================
 // Some function that reuse the surffeature slicer logic

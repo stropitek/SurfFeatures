@@ -42,6 +42,266 @@ typedef itk::ImageToVTKImageFilter<ImageType> imageToVTKImageFilterType;
 typedef itk::CastImageFilter< ImageType, UCharImageType > CastFilterType;
 
 
+// Help functions
+void writeKeypointsFromMhaFile(string mhaFile, string outputDir, int minHessian);
+int compareOriginalToResliced(const Mat& original, const Mat& resliced, const Mat& maskOriginal, const Mat& maskResliced);
+int resliceCastAndCompareToOriginal(vtkImageData* data3d, vnl_matrix<double> cosines, vnl_matrix<double> axisOrigin, const Mat& original, const Mat& maskOriginal);
+
+// Main functions
+int mainWriteKeypoints();
+int mainTransformResilience();
+int mainViewMatches(string scenario);
+
+int main()
+{
+  //return mainWriteKeypoints();
+  //return mainTransformResilience();
+  return mainViewMatches("C:\\Users\\DanK\\MProject\\data\\Results\\scenarios\\test_scenarios.txt");
+}
+
+int mainViewMatches(string scenario)
+{
+  vector<string> outputFiles;
+  vector<string> bogusFiles;
+  vector<string> queryFiles;
+  vector<vector<string> > trainFiles;
+  //vector<string> trainFiles;
+  vector<vector<string> > tab;
+  readTab(scenario, tab);
+
+  //for(int i=0; i<tab.size(); i++)
+  //{
+  //  bogusFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\save\\sweep_1a");
+  //  trainFiles.push_back(tab[i][0]);
+  //  queryFiles.push_back(tab[i][1]);
+  //  outputFiles.push_back(tab[i][2]);
+  //}
+  
+  for(int i=0; i<tab.size(); i++)
+  {
+    trainFiles.push_back(vector<string>(tab[i].begin(), tab[i].end()-2));
+    bogusFiles.push_back("C:\\Users\\DanK\\MProject\\data\\MNI\\save\\sweep_1a");
+    queryFiles.push_back(*(tab[i].end()-2));
+    outputFiles.push_back(*(tab[i].end()-1));
+  }
+
+  for(int i=0; i<outputFiles.size(); i++)
+  {
+    vtkSlicerSurfFeaturesLogic* surf = vtkSlicerSurfFeaturesLogic::New();
+    surf->loadKeypointsAndDescriptors(bogusFiles[i], "bogus");
+    surf->loadKeypointsAndDescriptors(queryFiles[i],"query");
+    surf->loadSeveralTrainKeypointsAndDescriptors(trainFiles[i]);
+    //surf->loadKeypointsAndDescriptors(trainFiles[i],"train");
+    computeCorrespondences(surf);
+    surf->simulateAll();
+    vector<vector<DMatch> > matches = surf->getAfterHoughMatches();
+    int count = 0;
+    bool stop = false;
+    bool display = false;
+    while(true)
+    {
+      if(count >= matches.size())
+        break;
+      string input;
+      cin >> input;
+      for(int nchar=0; nchar<input.size(); nchar++)
+      {
+        display = false;
+        if(input[nchar] == 'n')
+        {
+          count++;
+          if(count >= surf->getQuerySize())
+            count = 0;
+          continue;
+        }
+        else if(input[nchar] == 'p')
+        {
+          count--;
+          if(count < 0)
+            count = surf->getQuerySize()-1;
+          continue;
+        }
+        else if(input[nchar] == 'q'){
+          stop = true;
+          break;
+        }
+        else if(input[nchar] == 'd'){-
+          display = true;
+        }
+      }
+      if(stop)
+        break;
+
+
+      vector<int> votes = countVotes(matches[count], surf->getTrainSize());
+
+      cout << endl << "Query image # " << count << endl << "===============" << endl;
+      printVotes(votes);
+      cout << "Diff between estimation and tracking: " << surf->getPlaneDistances()[count] << " mm" << endl;
+
+      
+      if(!display)
+        continue;
+ 
+      Mat queryImage = surf->getQueryImage(count);
+      for(int tidx=0; tidx<votes.size(); tidx++)
+      {
+        if(votes[tidx] == 0)
+          continue;
+        // Display image
+        Mat matchesImg = getResultImage(surf->getQueryImage(count), surf->getQueryKeypoints(count), surf->getTrainImage(tidx), surf->getTrainKeypoints(tidx), matches[count], tidx);
+        cvStartWindowThread();
+        cv::imshow("Matches", matchesImg );
+        int key = cv::waitKey(0);
+        cvDestroyWindow("Matches");
+        cvDestroyWindow("Matches");
+        if(key==113) // ascii for 'q'
+          break;
+      }
+    }
+
+    surf->Delete();
+  }
+  return 0;
+}
+
+int mainWriteKeypoints()
+{
+  vector<string> files;
+  vector<string> outputDirs;
+  readLines("C:\\Users\\DanK\\MProject\\data\\MNI_AMIGO_mha.txt",files);
+  readLines("C:\\Users\\DanK\\MProject\\data\\MNI_AMIGO_dirs.txt",outputDirs);
+  int minHessian = 400;
+
+  if(files.size() != outputDirs.size())
+    return 1;
+
+  for(int i=0; i<files.size(); i++)
+    writeKeypointsFromMhaFile(files[i], outputDirs[i], minHessian);
+  return 0;
+}
+
+int mainTransformResilience()
+{
+
+    // read a slice from an mha file
+  string filename = "C:\\Users\\DanK\\MProject\\data\\MNI\\group1\\01\\pre\\sweep_1a\\sweep_1a.mha";
+  vector<Mat> images;
+  vector<string> filenames;
+  vector<bool> transformsValidity;
+  vector<vector<float> > transforms;
+  vector<int> frames;
+  frames.push_back(100);
+  read_mha(filename, images, filenames, transforms, transformsValidity, frames);
+  if(!transformsValidity[0])
+    return 1;
+  vnl_matrix<double> transformMatrix = convertMhaTransformToVnlMatrix(transforms[0]);
+  vnl_matrix<double> cosines = transformMatrix;
+  cosines = cosines.normalize_columns().extract(3,3);
+  vnl_matrix<double> frameOrigin = transformMatrix.extract(3,1,0,3);
+  vnl_matrix<double> transducerPixel(4,1);
+  transducerPixel.fill(1);
+  transducerPixel(0,0) = 314;
+  transducerPixel(1,0) = 415;
+  transducerPixel(2,0) = 0;
+  vnl_matrix<double> temp = transformMatrix*transducerPixel;
+  vnl_matrix<double> transducerOrigin(3,1);
+  transducerOrigin(0,0) = temp(0,0);
+  transducerOrigin(1,0) = temp(1,0);
+  transducerOrigin(2,0) = temp(2,0);
+  
+
+  
+
+  // Read in the 3d image
+  ReaderType::Pointer reader = ReaderType::New();
+  reader->SetImageIO(itk::NiftiImageIO::New());
+  reader->SetFileName("C:/Users/DanK/MProject/data/MNI/analyze3dus/1a.3dus.nii");
+  reader->Update();
+  ImageType::Pointer itkImage = reader->GetOutput();
+ 
+  vnl_matrix<itk::ImageBase<Dimension>::DirectionType::InternalMatrixType::element_type> direction = itkImage->GetDirection().GetVnlMatrix();
+  itk::ImageBase<Dimension>::PointType origin = itkImage->GetOrigin();
+  itk::ImageBase<Dimension>::SpacingType spacing = itkImage->GetSpacing();
+  vnl_matrix_fixed<double, Dimension+1, Dimension+1> intermediateMatrix;
+  vnl_matrix_fixed<double, Dimension+1, Dimension+1> directionMatrix;
+  vnl_matrix_fixed<double, Dimension+1, Dimension+1> LPStoRASMatrix;
+  vnl_matrix_fixed<double, Dimension+1, Dimension+1> IJKtoRASMatrix;
+  vnl_vector_fixed<double, Dimension+1> spacingVec;
+  vnl_vector_fixed<double, Dimension+1> originVec;
+  originVec.fill(1);
+  originVec.update(origin.Get_vnl_vector());
+  spacingVec.fill(1);
+  spacingVec.update(spacing.Get_vnl_vector());
+  intermediateMatrix.set_identity();
+  intermediateMatrix.set_diagonal(spacingVec);
+  intermediateMatrix.set_column(3,originVec.data_block());
+  directionMatrix.set_identity();
+  directionMatrix.update(direction);
+  LPStoRASMatrix.set_identity();
+  LPStoRASMatrix(0,0) = -1;
+  LPStoRASMatrix(1,1) = -1;
+  IJKtoRASMatrix = LPStoRASMatrix * (intermediateMatrix * directionMatrix);
+
+
+  // Convert the volume from itk to vtk
+  imageToVTKImageFilterType::Pointer toVtkFilter = imageToVTKImageFilterType::New();
+  toVtkFilter->SetInput(reader->GetOutput());
+  toVtkFilter->Update();
+  vtkSmartPointer<vtkImageData> data = vtkSmartPointer<vtkImageData>::New();
+  data->DeepCopy(toVtkFilter->GetOutput());
+  int* dim;
+  dim = data->GetDimensions();
+  data->SetSpacing(IJKtoRASMatrix.get_diagonal().extract(3).data_block());
+  data->SetOrigin(IJKtoRASMatrix.get_column(3).extract(3).data_block());
+
+  Mat mniMask = cv::imread("C:\\Users\\DanK\\MProject\\data\\MNI\\mni_mask.png", CV_LOAD_IMAGE_GRAYSCALE);
+
+  // Out of plane translation
+  cout << "Out of plane translation...";
+  vector<float> translations;
+  vector<int> houghVotesTranslation;
+  for(float translation = -5; translation<=-15.; translation+=0.5)
+  {
+    translations.push_back(translation);
+    vnl_matrix<double> frameCenter = frameOrigin + transformMatrix.extract(3,1)*images[0].cols/2 + transformMatrix.extract(3,1,0,1)*images[0].rows/2;
+    frameCenter += cosines.extract(3,1,0,2) * translation;
+    houghVotesTranslation.push_back(resliceCastAndCompareToOriginal(data, cosines, frameCenter, images[0], mniMask));
+  }
+
+  // In plane rotation
+  cout << "Inplane rotations...\n";
+  vector<float> inplaneRotations;
+  vector<int> houghVotesInplaneRotations;
+  for(float angle=-PI ; angle<-10; angle+=PI/8.)
+  {
+    inplaneRotations.push_back(angle);
+    vnl_double_3 zCosine = vnl_double_3(cosines(0,2),cosines(1,2), cosines(2,2));
+    vnl_matrix<double> rotation = getRotationMatrix(zCosine, angle);
+    vnl_matrix<double> newCosines =  rotation * cosines;
+    cv::Mat rotated = rotateImage(images[0], angle*180./PI);
+    cv::Mat rotatedMask = rotateImage(mniMask, angle*180./PI);
+    houghVotesInplaneRotations.push_back(compareOriginalToResliced(images[0],rotated, mniMask, rotatedMask));
+    //houghVotesInplaneRotations.push_back(resliceCastAndCompareToOriginal(data, newCosines, frameOrigin, images[0], mniMask));
+  }
+
+  // Out of plane rotation (around x axis)
+  cout << "Out of plane around x" << endl;
+  vector<float> outOfPlaneRotations;
+  vector<int> houghVotesOutOfPlaneRotations;
+  for(float angle=-PI/8; angle<=PI/8; angle+=PI/24)
+  {
+    outOfPlaneRotations.push_back(angle);
+    // Out of plane rotation around x axis, centered
+    vnl_double_3 xCosine = vnl_double_3(cosines(0,0),cosines(1,0), cosines(2,0));
+    vnl_matrix<double> rotation = getRotationMatrix(xCosine, angle);
+    vnl_matrix<double> newCosines =  rotation * cosines;
+    houghVotesOutOfPlaneRotations.push_back(resliceCastAndCompareToOriginal(data, newCosines, transducerOrigin, images[0], mniMask));
+  }
+
+  return 0;
+
+}
 
 void writeKeypointsFromMhaFile(string mhaFile, string outputDir, int minHessian)
 {
@@ -192,141 +452,3 @@ int resliceCastAndCompareToOriginal(vtkImageData* data3d, vnl_matrix<double> cos
     return result;
 }
 
-int main()
-{
-  // read a slice from an mha file
-  string filename = "C:\\Users\\DanK\\MProject\\data\\MNI\\group1\\01\\pre\\sweep_1a\\sweep_1a.mha";
-  vector<Mat> images;
-  vector<string> filenames;
-  vector<bool> transformsValidity;
-  vector<vector<float> > transforms;
-  vector<int> frames;
-  frames.push_back(100);
-  read_mha(filename, images, filenames, transforms, transformsValidity, frames);
-  if(!transformsValidity[0])
-    return 1;
-  vnl_matrix<double> transformMatrix = convertMhaTransformToVnlMatrix(transforms[0]);
-  vnl_matrix<double> cosines = transformMatrix;
-  cosines = cosines.normalize_columns().extract(3,3);
-  vnl_matrix<double> frameOrigin = transformMatrix.extract(3,1,0,3);
-  vnl_matrix<double> transducerPixel(4,1);
-  transducerPixel.fill(1);
-  transducerPixel(0,0) = 314;
-  transducerPixel(1,0) = 415;
-  transducerPixel(2,0) = 0;
-  vnl_matrix<double> temp = transformMatrix*transducerPixel;
-  vnl_matrix<double> transducerOrigin(3,1);
-  transducerOrigin(0,0) = temp(0,0);
-  transducerOrigin(1,0) = temp(1,0);
-  transducerOrigin(2,0) = temp(2,0);
-  
-
-  
-
-  // Read in the 3d image
-  ReaderType::Pointer reader = ReaderType::New();
-  reader->SetImageIO(itk::NiftiImageIO::New());
-  reader->SetFileName("C:/Users/DanK/MProject/data/MNI/analyze3dus/1a.3dus.nii");
-  reader->Update();
-  ImageType::Pointer itkImage = reader->GetOutput();
- 
-  vnl_matrix<itk::ImageBase<Dimension>::DirectionType::InternalMatrixType::element_type> direction = itkImage->GetDirection().GetVnlMatrix();
-  itk::ImageBase<Dimension>::PointType origin = itkImage->GetOrigin();
-  itk::ImageBase<Dimension>::SpacingType spacing = itkImage->GetSpacing();
-  vnl_matrix_fixed<double, Dimension+1, Dimension+1> intermediateMatrix;
-  vnl_matrix_fixed<double, Dimension+1, Dimension+1> directionMatrix;
-  vnl_matrix_fixed<double, Dimension+1, Dimension+1> LPStoRASMatrix;
-  vnl_matrix_fixed<double, Dimension+1, Dimension+1> IJKtoRASMatrix;
-  vnl_vector_fixed<double, Dimension+1> spacingVec;
-  vnl_vector_fixed<double, Dimension+1> originVec;
-  originVec.fill(1);
-  originVec.update(origin.Get_vnl_vector());
-  spacingVec.fill(1);
-  spacingVec.update(spacing.Get_vnl_vector());
-  intermediateMatrix.set_identity();
-  intermediateMatrix.set_diagonal(spacingVec);
-  intermediateMatrix.set_column(3,originVec.data_block());
-  directionMatrix.set_identity();
-  directionMatrix.update(direction);
-  LPStoRASMatrix.set_identity();
-  LPStoRASMatrix(0,0) = -1;
-  LPStoRASMatrix(1,1) = -1;
-  IJKtoRASMatrix = LPStoRASMatrix * (intermediateMatrix * directionMatrix);
-
-
-  // Convert the volume from itk to vtk
-  imageToVTKImageFilterType::Pointer toVtkFilter = imageToVTKImageFilterType::New();
-  toVtkFilter->SetInput(reader->GetOutput());
-  toVtkFilter->Update();
-  vtkSmartPointer<vtkImageData> data = vtkSmartPointer<vtkImageData>::New();
-  data->DeepCopy(toVtkFilter->GetOutput());
-  int* dim;
-  dim = data->GetDimensions();
-  data->SetSpacing(IJKtoRASMatrix.get_diagonal().extract(3).data_block());
-  data->SetOrigin(IJKtoRASMatrix.get_column(3).extract(3).data_block());
-
-  Mat mniMask = cv::imread("C:\\Users\\DanK\\MProject\\data\\MNI\\mni_mask.png", CV_LOAD_IMAGE_GRAYSCALE);
-
-  // Out of plane translation
-  cout << "Out of plane translation...";
-  vector<float> translations;
-  vector<int> houghVotesTranslation;
-  for(float translation = -5; translation<=-15.; translation+=0.5)
-  {
-    translations.push_back(translation);
-    vnl_matrix<double> frameCenter = frameOrigin + transformMatrix.extract(3,1)*images[0].cols/2 + transformMatrix.extract(3,1,0,1)*images[0].rows/2;
-    frameCenter += cosines.extract(3,1,0,2) * translation;
-    houghVotesTranslation.push_back(resliceCastAndCompareToOriginal(data, cosines, frameCenter, images[0], mniMask));
-  }
-
-  // In plane rotation
-  cout << "Inplane rotations...\n";
-  vector<float> inplaneRotations;
-  vector<int> houghVotesInplaneRotations;
-  for(float angle=-PI ; angle<-10; angle+=PI/8.)
-  {
-    inplaneRotations.push_back(angle);
-    vnl_double_3 zCosine = vnl_double_3(cosines(0,2),cosines(1,2), cosines(2,2));
-    vnl_matrix<double> rotation = getRotationMatrix(zCosine, angle);
-    vnl_matrix<double> newCosines =  rotation * cosines;
-    cv::Mat rotated = rotateImage(images[0], angle*180./PI);
-    cv::Mat rotatedMask = rotateImage(mniMask, angle*180./PI);
-    houghVotesInplaneRotations.push_back(compareOriginalToResliced(images[0],rotated, mniMask, rotatedMask));
-    //houghVotesInplaneRotations.push_back(resliceCastAndCompareToOriginal(data, newCosines, frameOrigin, images[0], mniMask));
-  }
-
-  // Out of plane rotation (around x axis)
-  cout << "Out of plane around x" << endl;
-  vector<float> outOfPlaneRotations;
-  vector<int> houghVotesOutOfPlaneRotations;
-  for(float angle=-PI/8; angle<=PI/8; angle+=PI/24)
-  {
-    outOfPlaneRotations.push_back(angle);
-    // Out of plane rotation around x axis, centered
-    vnl_double_3 xCosine = vnl_double_3(cosines(0,0),cosines(1,0), cosines(2,0));
-    vnl_matrix<double> rotation = getRotationMatrix(xCosine, angle);
-    vnl_matrix<double> newCosines =  rotation * cosines;
-    houghVotesOutOfPlaneRotations.push_back(resliceCastAndCompareToOriginal(data, newCosines, transducerOrigin, images[0], mniMask));
-  }
-
-
-
-  // Ou
-
-
-
-  // ==============================================
-  // write correspondences for a set of images
-  // ==============================================
-  //vector<string> files;
-  //vector<string> outputDirs;
-  //readLines("C:\\Users\\DanK\\MProject\\data\\MNI_AMIGO_mha.txt",files);
-  //readLines("C:\\Users\\DanK\\MProject\\data\\MNI_AMIGO_dirs.txt",outputDirs);
-  //int minHessian = 400;
-
-  //if(files.size() != outputDirs.size())
-  //  return 0;
-
-  //for(int i=0; i<files.size(); i++)
-  //  writeKeypointsFromMhaFile(files[i], outputDirs[i], minHessian);
-}
