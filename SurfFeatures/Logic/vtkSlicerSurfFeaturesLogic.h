@@ -216,9 +216,6 @@ private:
   // Attributes
   // ============================================
   // Node
-  vtkMRMLScalarVolumeNode* node;
-  vtkMRMLScalarVolumeNode* nodeResliced;
-
   vtkMRMLScalarVolumeNode* queryNode;
   vtkMRMLScalarVolumeNode* matchNode;
 

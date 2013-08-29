@@ -94,10 +94,13 @@ int mainViewMatches(string scenario)
     //surf->loadKeypointsAndDescriptors(trainFiles[i],"train");
     computeCorrespondences(surf);
     surf->simulateAll();
-    vector<vector<DMatch> > matches = surf->getAfterHoughMatches();
+    vector<vector<DMatch> > houghMatches = surf->getAfterHoughMatches();
+    vector<vector<DMatch> > bogusMatches = surf->getAfterBogusMatches();
+    vector<vector<DMatch> > matches = houghMatches;
     int count = 0;
     bool stop = false;
     bool display = false;
+    bool displayKeypoints = false;
     while(true)
     {
       if(count >= matches.size())
@@ -107,6 +110,7 @@ int mainViewMatches(string scenario)
       for(int nchar=0; nchar<input.size(); nchar++)
       {
         display = false;
+        displayKeypoints = false;
         if(input[nchar] == 'n')
         {
           count++;
@@ -125,9 +129,15 @@ int mainViewMatches(string scenario)
           stop = true;
           break;
         }
-        else if(input[nchar] == 'd'){-
+        else if(input[nchar] == 'd'){
           display = true;
         }
+        else if(input[nchar] == 'k')
+          displayKeypoints = true;
+        else if(input[nchar] == 'H')
+          matches = houghMatches;
+        else if(input[nchar] == 'B')
+          matches = bogusMatches;
       }
       if(stop)
         break;
@@ -137,26 +147,41 @@ int mainViewMatches(string scenario)
 
       cout << endl << "Query image # " << count << endl << "===============" << endl;
       printVotes(votes);
-      cout << "Diff between estimation and tracking: " << surf->getPlaneDistances()[count] << " mm" << endl;
+      cout << "Plane error between estimation and tracking: " << surf->getPlaneDistances()[count] << " mm" << endl;
+      cout << "Mean Distance between matches:               " << surf->getMatchDistances()[count] << " mm" << endl;
+      cout << "# inliers, # outliers after RANSAC: " << surf->getIInliers()[count] << ", " << surf->getIOutliers()[count] << endl;
 
       
-      if(!display)
+      if(!display && !displayKeypoints)
         continue;
  
+      if(displayKeypoints)
+      {
+        Mat keypointsImg;
+        cv::drawKeypoints(surf->getQueryImage(count), surf->getQueryKeypoints(count), keypointsImg);
+        cvStartWindowThread();
+        cv::imshow("Keypoints", keypointsImg );
+        int key = cv::waitKey(0);
+        cvDestroyWindow("Keypoints");
+        cvDestroyWindow("Keypoints");
+      }
+      else if(display)
+      {
       Mat queryImage = surf->getQueryImage(count);
       for(int tidx=0; tidx<votes.size(); tidx++)
       {
-        if(votes[tidx] == 0)
-          continue;
-        // Display image
-        Mat matchesImg = getResultImage(surf->getQueryImage(count), surf->getQueryKeypoints(count), surf->getTrainImage(tidx), surf->getTrainKeypoints(tidx), matches[count], tidx);
-        cvStartWindowThread();
-        cv::imshow("Matches", matchesImg );
-        int key = cv::waitKey(0);
-        cvDestroyWindow("Matches");
-        cvDestroyWindow("Matches");
-        if(key==113) // ascii for 'q'
-          break;
+          if(votes[tidx] == 0)
+            continue;
+          // Display image
+          Mat matchesImg = getResultImage(surf->getQueryImage(count), surf->getQueryKeypoints(count), surf->getTrainImage(tidx), surf->getTrainKeypoints(tidx), matches[count], tidx);
+          cvStartWindowThread();
+          cv::imshow("Matches", matchesImg );
+          int key = cv::waitKey(0);
+          cvDestroyWindow("Matches");
+          cvDestroyWindow("Matches");
+          if(key==113) // ascii for 'q'
+            break;
+      }
       }
     }
 
